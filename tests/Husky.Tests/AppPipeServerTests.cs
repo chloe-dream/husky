@@ -166,6 +166,89 @@ public sealed class AppPipeServerTests
     }
 
     [Fact]
+    public async Task SendPingAsync_returns_true_when_app_responds_with_pong()
+    {
+        await using LauncherPipeHarness h = await PerformHandshakeAsync();
+
+        Task<bool> sendPing = h.Server.SendPingAsync(TimeSpan.FromSeconds(3));
+
+        MessageEnvelope ping = await ReadAsync(h.ClientReader);
+        Assert.Equal(MessageTypes.Ping, ping.Type);
+
+        await SendPongAsync(h.ClientWriter, ping.Id);
+
+        Assert.True(await sendPing.WaitAsync(TimeSpan.FromSeconds(3)));
+    }
+
+    [Fact]
+    public async Task SendPingAsync_returns_false_when_app_does_not_respond_in_time()
+    {
+        await using LauncherPipeHarness h = await PerformHandshakeAsync();
+
+        Task<bool> sendPing = h.Server.SendPingAsync(TimeSpan.FromMilliseconds(150));
+
+        await ReadAsync(h.ClientReader); // drain the ping
+
+        Assert.False(await sendPing.WaitAsync(TimeSpan.FromSeconds(2)));
+    }
+
+    [Fact]
+    public async Task SendPingAsync_throws_when_called_before_handshake()
+    {
+        await using AppPipeServer server = LauncherPipeHarness.CreateUnconnectedServer();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await server.SendPingAsync(TimeSpan.FromSeconds(1)));
+    }
+
+    [Fact]
+    public async Task SendPingAsync_only_resolves_for_a_pong_with_matching_replyTo()
+    {
+        await using LauncherPipeHarness h = await PerformHandshakeAsync();
+
+        Task<bool> sendPing = h.Server.SendPingAsync(TimeSpan.FromMilliseconds(300));
+
+        await ReadAsync(h.ClientReader); // drain the launcher's ping
+
+        // Send a pong with a foreign replyTo — must be ignored by the launcher.
+        await SendPongAsync(h.ClientWriter, replyTo: Guid.NewGuid().ToString("D"));
+
+        Assert.False(await sendPing.WaitAsync(TimeSpan.FromSeconds(2)));
+    }
+
+    [Fact]
+    public async Task OnActivity_fires_for_every_received_message()
+    {
+        await using LauncherPipeHarness h = await PerformHandshakeAsync();
+
+        int activityCount = 0;
+        h.Server.OnActivity = () => Interlocked.Increment(ref activityCount);
+
+        await h.ClientWriter.WriteAsync(new MessageEnvelope { Type = MessageTypes.Heartbeat });
+        await h.ClientWriter.WriteAsync(new MessageEnvelope { Type = "future-message" });
+        await h.ClientWriter.WriteAsync(new MessageEnvelope { Type = MessageTypes.Heartbeat });
+
+        await WaitForActivityAsync(() => Volatile.Read(ref activityCount) >= 3, TimeSpan.FromSeconds(2));
+        Assert.Equal(3, Volatile.Read(ref activityCount));
+    }
+
+    [Fact]
+    public async Task OnActivity_fires_before_pong_dispatch()
+    {
+        await using LauncherPipeHarness h = await PerformHandshakeAsync();
+
+        int activityCount = 0;
+        h.Server.OnActivity = () => Interlocked.Increment(ref activityCount);
+
+        Task<bool> sendPing = h.Server.SendPingAsync(TimeSpan.FromSeconds(3));
+        MessageEnvelope ping = await ReadAsync(h.ClientReader);
+        await SendPongAsync(h.ClientWriter, ping.Id);
+
+        Assert.True(await sendPing.WaitAsync(TimeSpan.FromSeconds(3)));
+        Assert.Equal(1, Volatile.Read(ref activityCount));
+    }
+
+    [Fact]
     public async Task SendShutdownAsync_emits_a_shutdown_envelope_and_returns_when_app_acks()
     {
         await using LauncherPipeHarness h = await LauncherPipeHarness.CreateConnectedAsync();
@@ -256,6 +339,49 @@ public sealed class AppPipeServerTests
 
         await server.DisposeAsync();
         await server.DisposeAsync(); // must not throw
+    }
+
+    private static async Task<LauncherPipeHarness> PerformHandshakeAsync()
+    {
+        LauncherPipeHarness h = await LauncherPipeHarness.CreateConnectedAsync();
+        try
+        {
+            Task accept = h.Server.AcceptAndHandshakeAsync(TimeSpan.FromSeconds(5));
+            await SendHelloAsync(h.ClientWriter, "test-app", "1.2.3", 1);
+            await ReadAsync(h.ClientReader); // welcome
+            await accept;
+            return h;
+        }
+        catch
+        {
+            await h.DisposeAsync();
+            throw;
+        }
+    }
+
+    private static async Task SendPongAsync(MessageWriter writer, string? replyTo)
+    {
+        PongPayload payload = new(Status: "healthy", Details: null);
+        JsonElement data = JsonSerializer.SerializeToElement(payload, HuskyJsonContext.Default.PongPayload);
+        await writer.WriteAsync(new MessageEnvelope
+        {
+            Id = Guid.NewGuid().ToString("D"),
+            ReplyTo = replyTo,
+            Type = MessageTypes.Pong,
+            Data = data,
+        });
+    }
+
+    private static async Task WaitForActivityAsync(Func<bool> predicate, TimeSpan timeout)
+    {
+        using CancellationTokenSource cts = new(timeout);
+        while (!cts.IsCancellationRequested)
+        {
+            if (predicate()) return;
+            try { await Task.Delay(TimeSpan.FromMilliseconds(20), cts.Token); }
+            catch (OperationCanceledException) { break; }
+        }
+        throw new TimeoutException($"predicate did not become true within {timeout}.");
     }
 
     private static async Task<string> SendHelloAsync(

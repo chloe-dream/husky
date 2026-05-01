@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.IO.Pipes;
 using System.Runtime.Versioning;
 using System.Security.AccessControl;
@@ -16,6 +17,7 @@ internal sealed class AppPipeServer : IAsyncDisposable
     private readonly MessageWriter writer;
     private readonly SemaphoreSlim writeMutex = new(initialCount: 1, maxCount: 1);
     private readonly CancellationTokenSource lifetimeCts = new();
+    private readonly ConcurrentDictionary<string, TaskCompletionSource> pendingPings = new();
     private Task? receiverLoop;
     private TaskCompletionSource? shutdownAckTcs;
     private string? shutdownAckExpectedFor;
@@ -24,6 +26,14 @@ internal sealed class AppPipeServer : IAsyncDisposable
     public string PipeName { get; }
     public string LauncherVersion { get; }
     public ConnectedApp? ConnectedApp { get; private set; }
+
+    /// <summary>
+    /// Fires once for every message received from the hosted app — heartbeat,
+    /// pong, shutdown-ack, or unknown — *before* type-specific dispatch. The
+    /// watchdog uses this to refresh its <c>lastActivity</c> timestamp per
+    /// LEASH §8.1.
+    /// </summary>
+    public Action? OnActivity { get; set; }
 
     internal Task? ReceiverTask => receiverLoop;
 
@@ -104,6 +114,33 @@ internal sealed class AppPipeServer : IAsyncDisposable
         return payload;
     }
 
+    public async Task<bool> SendPingAsync(TimeSpan timeout, CancellationToken ct = default)
+    {
+        if (receiverLoop is null)
+            throw new InvalidOperationException("Cannot send ping before the handshake completes.");
+
+        string id = Guid.NewGuid().ToString("D");
+        TaskCompletionSource pongTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        pendingPings[id] = pongTcs;
+
+        try
+        {
+            MessageEnvelope envelope = new() { Id = id, Type = MessageTypes.Ping };
+            await WriteAsync(envelope, ct).ConfigureAwait(false);
+
+            try
+            {
+                await pongTcs.Task.WaitAsync(timeout, ct).ConfigureAwait(false);
+                return true;
+            }
+            catch (TimeoutException) { return false; }
+        }
+        finally
+        {
+            pendingPings.TryRemove(id, out _);
+        }
+    }
+
     public async Task SendShutdownAsync(
         string reason,
         TimeSpan totalTimeout,
@@ -179,15 +216,26 @@ internal sealed class AppPipeServer : IAsyncDisposable
 
                 if (envelope is null) return;
 
-                if (envelope.Type == MessageTypes.ShutdownAck
-                    && envelope.ReplyTo is { Length: > 0 } replyTo
-                    && replyTo == shutdownAckExpectedFor)
-                {
-                    shutdownAckTcs?.TrySetResult();
-                }
+                // §8.1: every received message resets the watchdog's activity
+                // timestamp, regardless of type.
+                OnActivity?.Invoke();
 
-                // Heartbeat (drop), ping/shutdown wiring lands in later steps,
-                // unknown types dropped per §3.6.
+                switch (envelope.Type)
+                {
+                    case MessageTypes.ShutdownAck
+                        when envelope.ReplyTo is { Length: > 0 } shutdownReplyTo
+                             && shutdownReplyTo == shutdownAckExpectedFor:
+                        shutdownAckTcs?.TrySetResult();
+                        break;
+
+                    case MessageTypes.Pong
+                        when envelope.ReplyTo is { Length: > 0 } pongReplyTo
+                             && pendingPings.TryGetValue(pongReplyTo, out TaskCompletionSource? pongTcs):
+                        pongTcs.TrySetResult();
+                        break;
+
+                    // heartbeat / unknown types: drop per §3.6.
+                }
             }
         }
         catch (OperationCanceledException) { /* normal */ }
