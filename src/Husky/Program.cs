@@ -138,6 +138,11 @@ await using (app)
             return app.ExitCode;
         }
 
+        // Stop the watchdog before the graceful shutdown sequence — the launcher
+        // is now driving the conversation, and a probe in flight here would
+        // race the shutdown handshake.
+        await watchdog.DisposeAsync();
+
         ConsoleOutput.Husky("asking app to sit.");
         await StopAppGracefullyAsync(app, pipeServer, config, hardKillTrigger.Token);
         return ExitOk;
