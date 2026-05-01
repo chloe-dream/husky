@@ -32,7 +32,9 @@ internal sealed class PipeTestHarness : IAsyncDisposable
             PipeDirection.InOut,
             maxNumberOfServerInstances: 1,
             PipeTransmissionMode.Byte,
-            PipeOptions.Asynchronous);
+            PipeOptions.Asynchronous,
+            inBufferSize: 65_536,
+            outBufferSize: 65_536);
 
         NamedPipeClientStream client = new(
             ".",
