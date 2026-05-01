@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Husky\Husky.csproj" />
+    <ProjectReference Include="..\Husky.TestApp\Husky.TestApp.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>

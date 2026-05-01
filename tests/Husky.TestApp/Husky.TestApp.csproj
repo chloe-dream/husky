@@ -4,6 +4,7 @@
     <OutputType>Exe</OutputType>
     <AssemblyName>Husky.TestApp</AssemblyName>
     <IsPackable>false</IsPackable>
+    <IsTestProject>false</IsTestProject>
   </PropertyGroup>
 
   <ItemGroup>
