@@ -56,6 +56,41 @@ public sealed class MessageEnvelopeJsonTests
     }
 
     [Fact]
+    public void Ping_envelope_carries_id_and_type_only()
+    {
+        MessageEnvelope envelope = new()
+        {
+            Id = "44444444-4444-4444-4444-444444444444",
+            Type = MessageTypes.Ping,
+        };
+
+        string json = JsonSerializer.Serialize(envelope, HuskyJsonContext.Default.MessageEnvelope);
+
+        Assert.Equal(
+            """{"id":"44444444-4444-4444-4444-444444444444","type":"ping"}""",
+            json);
+    }
+
+    [Fact]
+    public void Welcome_with_rejection_keeps_reason_in_the_wire_shape()
+    {
+        // The rejection path is how the launcher refuses an app on protocol
+        // version mismatch (LEASH §3.6). Pin the wire shape so a future
+        // refactor cannot silently drop the reason field.
+        WelcomePayload payload = new(
+            ProtocolVersion: 1,
+            LauncherVersion: "1.0.0",
+            Accepted: false,
+            Reason: "protocol version mismatch: launcher=1, app=2");
+
+        string json = JsonSerializer.Serialize(payload, HuskyJsonContext.Default.WelcomePayload);
+
+        Assert.Equal(
+            """{"protocolVersion":1,"launcherVersion":"1.0.0","accepted":false,"reason":"protocol version mismatch: launcher=1, app=2"}""",
+            json);
+    }
+
+    [Fact]
     public void ShutdownAck_envelope_carries_id_and_replyTo()
     {
         MessageEnvelope envelope = new()
