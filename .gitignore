@@ -1,0 +1,45 @@
+# .NET build output
+bin/
+obj/
+out/
+publish/
+
+# NuGet
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+
+# Visual Studio / Rider
+.vs/
+.idea/
+*.user
+*.suo
+*.userprefs
+
+# VS Code
+.vscode/
+
+# Test artifacts
+TestResults/
+[Cc]overage*/
+*.coverage
+*.coveragexml
+*.trx
+
+# Editor swap files
+*.swp
+*~
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Crash dumps and stray temp files
+*.stackdump
+*.tmp
+*.log
+
+# Local Husky runtime artifacts (if the launcher is ever executed from the repo)
+download/
