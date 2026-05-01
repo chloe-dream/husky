@@ -3,6 +3,7 @@ using Husky.Client;
 const string ModeEnvVar = "HUSKY_TESTAPP_MODE";
 const string ModeNormal = "normal";
 const string ModeSlowShutdown = "slow-shutdown";
+const string ModeWait = "wait";
 
 string mode = Environment.GetEnvironmentVariable(ModeEnvVar) ?? ModeNormal;
 
@@ -12,6 +13,14 @@ Console.Out.WriteLine($"testapp: ready (mode={mode})");
 Console.Out.Flush();
 Console.Error.WriteLine("testapp: hello stderr");
 Console.Error.Flush();
+
+// 'wait' mode: do not attach, sleep forever. Used to exercise the launcher's
+// hard-kill path without needing a pipe server in scope.
+if (mode == ModeWait)
+{
+    await Task.Delay(Timeout.InfiniteTimeSpan, CancellationToken.None);
+    return 0;
+}
 
 if (!HuskyClient.IsHosted)
 {
