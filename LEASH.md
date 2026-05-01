@@ -373,6 +373,7 @@ public static class HuskyServiceCollectionExtensions
 
 - `Husky.Protocol` (project reference).
 - `Microsoft.Extensions.Hosting.Abstractions` (for the DI extension).
+- `Microsoft.Extensions.Diagnostics.HealthChecks` (so the DI integration in §4.2 can read `HealthCheckService` automatically when the app calls `AddHealthChecks()` — without this dep that contract is impossible to honour).
 - `System.Text.Json` (built-in).
 - **No** other NuGet dependencies.
 
