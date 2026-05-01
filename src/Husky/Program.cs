@@ -52,13 +52,17 @@ AppProcessOptions processOptions = new(
 
 ConsoleOutput.Husky($"starting {config.Name}");
 
+// Late-bound activity sink: AppProcess.Start needs the stdout/stderr
+// callbacks now, but the watchdog isn't created until after the handshake.
+Action? recordActivity = null;
+
 AppProcess app;
 try
 {
     app = AppProcess.Start(
         processOptions,
-        onStandardOutput: ConsoleOutput.AppOut,
-        onStandardError: ConsoleOutput.AppErr);
+        onStandardOutput: line => { recordActivity?.Invoke(); ConsoleOutput.AppOut(line); },
+        onStandardError: line => { recordActivity?.Invoke(); ConsoleOutput.AppErr(line); });
 }
 catch (Exception ex) when (ex is FileNotFoundException or InvalidOperationException)
 {
@@ -114,6 +118,16 @@ await using (app)
         ConnectedApp connected = pipeServer.ConnectedApp!;
         ConsoleOutput.Husky(
             $"{connected.Name} v{connected.Version} attached (pid={connected.Pid})");
+
+        await using Watchdog watchdog = new(pipeServer.SendPingAsync, WatchdogOptions.Default);
+        pipeServer.OnActivity = watchdog.RecordActivity;
+        recordActivity = watchdog.RecordActivity;
+        watchdog.OnAppDeclaredDead = () =>
+        {
+            ConsoleOutput.Husky("no answer. growling.");
+            app.Kill();
+        };
+        watchdog.Start();
 
         Task graceful = AwaitCancellationAsync(gracefulTrigger.Token);
         Task winner = await Task.WhenAny(app.ExitTask, graceful);
