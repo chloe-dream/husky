@@ -24,6 +24,8 @@ public sealed class MessageWriter(Stream stream, bool leaveOpen = false) : IAsyn
         {
             await stream.FlushAsync().ConfigureAwait(false);
         }
+        catch (IOException) { /* best-effort flush during dispose */ }
+        catch (InvalidOperationException) { /* pipe already disconnected (covers ObjectDisposedException) */ }
         finally
         {
             if (!leaveOpen)

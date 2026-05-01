@@ -6,6 +6,6 @@
 
   <PropertyGroup>
     <IsTestProject>true</IsTestProject>
-    <NoWarn>$(NoWarn);CA1707</NoWarn>
+    <NoWarn>$(NoWarn);CA1707;CA1711</NoWarn>
   </PropertyGroup>
 </Project>
