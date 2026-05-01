@@ -122,6 +122,47 @@ public sealed class HuskyClientHandshakeTests
     }
 
     [Fact]
+    public async Task Handshake_throws_when_welcome_has_no_payload()
+    {
+        await using PipeTestHarness harness = await PipeTestHarness.CreateAsync();
+
+        Task<HuskyClient> attachTask = HuskyClient.AttachOnStreamAsync(
+            harness.Client, "test-app", HuskyClientOptions.Default, CancellationToken.None);
+
+        MessageEnvelope? hello = await harness.ServerReader.ReadAsync();
+        await harness.ServerWriter.WriteAsync(new MessageEnvelope
+        {
+            Id = Guid.NewGuid().ToString("D"),
+            ReplyTo = hello!.Id,
+            Type = MessageTypes.Welcome,
+            // Data deliberately absent.
+        });
+
+        InvalidOperationException ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await attachTask);
+        Assert.Contains("payload", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Handshake_throws_when_first_message_is_not_welcome()
+    {
+        await using PipeTestHarness harness = await PipeTestHarness.CreateAsync();
+
+        Task<HuskyClient> attachTask = HuskyClient.AttachOnStreamAsync(
+            harness.Client, "test-app", HuskyClientOptions.Default, CancellationToken.None);
+
+        await harness.ServerReader.ReadAsync();
+        // Send a heartbeat instead of a welcome.
+        await harness.ServerWriter.WriteAsync(
+            new MessageEnvelope { Type = MessageTypes.Heartbeat });
+
+        InvalidOperationException ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await attachTask);
+        Assert.Contains(MessageTypes.Welcome, ex.Message, StringComparison.Ordinal);
+        Assert.Contains(MessageTypes.Heartbeat, ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Handshake_throws_when_pipe_closes_before_welcome()
     {
         await using PipeTestHarness harness = await PipeTestHarness.CreateAsync();

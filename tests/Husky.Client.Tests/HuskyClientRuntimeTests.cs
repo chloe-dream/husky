@@ -147,6 +147,35 @@ public sealed class HuskyClientRuntimeTests
     }
 
     [Fact]
+    public async Task Handler_exception_does_not_break_ShutdownToken_signal()
+    {
+        await using ConnectedHandshake h = await ConnectedHandshake.PerformAsync();
+
+        h.Client.OnShutdown((_, _) => throw new InvalidOperationException("handler boom"));
+
+        await SendShutdownAsync(
+            h.Harness.ServerWriter, Guid.NewGuid().ToString("D"), "update", timeoutSeconds: 30);
+
+        await WaitForCancellationAsync(TimeSpan.FromSeconds(3), h.Client.ShutdownToken);
+    }
+
+    [Fact]
+    public async Task SetHealth_provider_exception_falls_back_to_Healthy()
+    {
+        await using ConnectedHandshake h = await ConnectedHandshake.PerformAsync();
+        h.Client.SetHealth(() => throw new InvalidOperationException("provider boom"));
+
+        string pingId = Guid.NewGuid().ToString("D");
+        await h.Harness.ServerWriter.WriteAsync(
+            new MessageEnvelope { Id = pingId, Type = MessageTypes.Ping });
+
+        MessageEnvelope pong = await ReadUntilAsync(h.Harness.ServerReader, MessageTypes.Pong);
+        PongPayload? payload = pong.Data!.Value.Deserialize(HuskyJsonContext.Default.PongPayload);
+
+        Assert.Equal("healthy", payload!.Status);
+    }
+
+    [Fact]
     public async Task Unknown_message_types_are_dropped_silently()
     {
         await using ConnectedHandshake h = await ConnectedHandshake.PerformAsync();
