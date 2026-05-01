@@ -134,7 +134,7 @@ static async Task StopAppGracefullyAsync(
 {
     if (hardKill.IsCancellationRequested)
     {
-        HardKill(app, "double interrupt — taking it down.");
+        await HardKillAsync(app, "double interrupt — taking it down.");
         return;
     }
 
@@ -150,7 +150,7 @@ static async Task StopAppGracefullyAsync(
     catch (IOException) { ConsoleOutput.Husky("pipe is gone — proceeding to wait."); }
     catch (OperationCanceledException) when (hardKill.IsCancellationRequested)
     {
-        HardKill(app, "double interrupt — taking it down.");
+        await HardKillAsync(app, "double interrupt — taking it down.");
         return;
     }
 
@@ -161,7 +161,7 @@ static async Task StopAppGracefullyAsync(
     }
     if (hardKill.IsCancellationRequested)
     {
-        HardKill(app, "double interrupt — taking it down.");
+        await HardKillAsync(app, "double interrupt — taking it down.");
         return;
     }
 
@@ -172,7 +172,7 @@ static async Task StopAppGracefullyAsync(
         return;
     }
 
-    HardKill(app, "app didn't respond. growling.");
+    await HardKillAsync(app, "app didn't respond. growling.");
 }
 
 static async Task<bool> TryWaitForExitAsync(AppProcess app, TimeSpan timeout, CancellationToken hardKill)
@@ -186,12 +186,13 @@ static async Task<bool> TryWaitForExitAsync(AppProcess app, TimeSpan timeout, Ca
     catch (OperationCanceledException) { return false; }
 }
 
-static void HardKill(AppProcess app, string message)
+static async Task HardKillAsync(AppProcess app, string message)
 {
     ConsoleOutput.Husky(message);
     app.Kill();
-    try { app.ExitTask.Wait(TimeSpan.FromSeconds(5)); }
-    catch (Exception) { /* swallow — we're tearing down */ }
+    try { await app.ExitTask.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false); }
+    catch (TimeoutException) { /* swallow — we're tearing down */ }
+    catch (OperationCanceledException) { /* normal */ }
 }
 
 static async Task AwaitCancellationAsync(CancellationToken token)
