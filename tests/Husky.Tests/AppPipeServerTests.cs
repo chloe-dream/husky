@@ -166,6 +166,68 @@ public sealed class AppPipeServerTests
     }
 
     [Fact]
+    public async Task SendShutdownAsync_emits_a_shutdown_envelope_and_returns_when_app_acks()
+    {
+        await using LauncherPipeHarness h = await LauncherPipeHarness.CreateConnectedAsync();
+        Task accept = h.Server.AcceptAndHandshakeAsync(TimeSpan.FromSeconds(5));
+        await SendHelloAsync(h.ClientWriter, "test-app", "1.2.3", 1);
+        await ReadAsync(h.ClientReader); // welcome
+        await accept;
+
+        Task send = h.Server.SendShutdownAsync(
+            reason: "manual",
+            totalTimeout: TimeSpan.FromSeconds(30),
+            ackTimeout: TimeSpan.FromSeconds(5));
+
+        MessageEnvelope shutdown = await ReadAsync(h.ClientReader);
+        Assert.Equal(MessageTypes.Shutdown, shutdown.Type);
+        ShutdownPayload? payload = shutdown.Data?.Deserialize(HuskyJsonContext.Default.ShutdownPayload);
+        Assert.NotNull(payload);
+        Assert.Equal("manual", payload!.Reason);
+        Assert.Equal(30, payload.TimeoutSeconds);
+
+        await h.ClientWriter.WriteAsync(new MessageEnvelope
+        {
+            Id = Guid.NewGuid().ToString("D"),
+            ReplyTo = shutdown.Id,
+            Type = MessageTypes.ShutdownAck,
+        });
+
+        await send.WaitAsync(TimeSpan.FromSeconds(3));
+    }
+
+    [Fact]
+    public async Task SendShutdownAsync_throws_TimeoutException_when_app_does_not_ack_in_time()
+    {
+        await using LauncherPipeHarness h = await LauncherPipeHarness.CreateConnectedAsync();
+        Task accept = h.Server.AcceptAndHandshakeAsync(TimeSpan.FromSeconds(5));
+        await SendHelloAsync(h.ClientWriter, "test-app", "1.2.3", 1);
+        await ReadAsync(h.ClientReader); // welcome
+        await accept;
+
+        Task send = h.Server.SendShutdownAsync(
+            reason: "manual",
+            totalTimeout: TimeSpan.FromSeconds(30),
+            ackTimeout: TimeSpan.FromMilliseconds(150));
+
+        await ReadAsync(h.ClientReader); // drain shutdown so the pipe doesn't back up
+
+        await Assert.ThrowsAsync<TimeoutException>(async () => await send);
+    }
+
+    [Fact]
+    public async Task SendShutdownAsync_throws_when_called_before_handshake()
+    {
+        await using AppPipeServer server = LauncherPipeHarness.CreateUnconnectedServer();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await server.SendShutdownAsync(
+                reason: "manual",
+                totalTimeout: TimeSpan.FromSeconds(30),
+                ackTimeout: TimeSpan.FromSeconds(1)));
+    }
+
+    [Fact]
     public async Task PipeName_is_exposed_after_Create()
     {
         const string name = "husky-test-explicit-name";

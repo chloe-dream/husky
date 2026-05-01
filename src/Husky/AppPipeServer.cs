@@ -17,6 +17,8 @@ internal sealed class AppPipeServer : IAsyncDisposable
     private readonly SemaphoreSlim writeMutex = new(initialCount: 1, maxCount: 1);
     private readonly CancellationTokenSource lifetimeCts = new();
     private Task? receiverLoop;
+    private TaskCompletionSource? shutdownAckTcs;
+    private string? shutdownAckExpectedFor;
     private bool disposed;
 
     public string PipeName { get; }
@@ -102,6 +104,35 @@ internal sealed class AppPipeServer : IAsyncDisposable
         return payload;
     }
 
+    public async Task SendShutdownAsync(
+        string reason,
+        TimeSpan totalTimeout,
+        TimeSpan ackTimeout,
+        CancellationToken ct = default)
+    {
+        if (receiverLoop is null)
+            throw new InvalidOperationException("Cannot send shutdown before the handshake completes.");
+
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+
+        string id = Guid.NewGuid().ToString("D");
+        TaskCompletionSource ackTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        shutdownAckTcs = ackTcs;
+        shutdownAckExpectedFor = id;
+
+        ShutdownPayload payload = new(reason, (int)totalTimeout.TotalSeconds);
+        JsonElement data = JsonSerializer.SerializeToElement(payload, HuskyJsonContext.Default.ShutdownPayload);
+        MessageEnvelope envelope = new()
+        {
+            Id = id,
+            Type = MessageTypes.Shutdown,
+            Data = data,
+        };
+
+        await WriteAsync(envelope, ct).ConfigureAwait(false);
+        await ackTcs.Task.WaitAsync(ackTimeout, ct).ConfigureAwait(false);
+    }
+
     private async Task SendWelcomeAsync(
         string? replyTo, bool accepted, string? reason, CancellationToken ct)
     {
@@ -148,8 +179,15 @@ internal sealed class AppPipeServer : IAsyncDisposable
 
                 if (envelope is null) return;
 
-                // Step 4 only knows hello (handled in handshake) and heartbeat (drop).
-                // Ping/shutdown wiring lands in later steps. Per §3.6 unknown types are dropped.
+                if (envelope.Type == MessageTypes.ShutdownAck
+                    && envelope.ReplyTo is { Length: > 0 } replyTo
+                    && replyTo == shutdownAckExpectedFor)
+                {
+                    shutdownAckTcs?.TrySetResult();
+                }
+
+                // Heartbeat (drop), ping/shutdown wiring lands in later steps,
+                // unknown types dropped per §3.6.
             }
         }
         catch (OperationCanceledException) { /* normal */ }
