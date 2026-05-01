@@ -65,15 +65,21 @@ If the choice could affect how Chloe uses or perceives the tool — file layout,
 
 ### Code style baseline
 
+**Always write to the latest .NET and C# guidance.** We track Microsoft's current .NET design guidelines and the newest stable C# language features (C# 14 on .NET 10 today; whatever ships next when the SDK moves). When a newer language feature replaces an older idiom — primary constructors over boilerplate ctors, collection expressions over `new List<T> { ... }`, `field` keyword over manual backing fields, pattern matching over chained `if`/`is`, target-typed `new` where the type is clear, raw string literals over escaped strings, `required` over runtime null-checks, `init`/`readonly` over mutable state, file-scoped namespaces, etc. — use the newer one by default. If a feature is not yet stable in the current SDK, do **not** preview it; wait for GA.
+
+The standing rules below are the load-bearing specifics; the "use modern C#" principle is the umbrella.
+
 - File-scoped namespaces.
 - Primary constructors where they reduce noise.
 - Records for immutable data; classes for behavior.
-- `async`/`await` everywhere I/O happens. No `.Result`, no `.Wait()`, no sync-over-async.
+- Collection expressions (`[..]`) for literals; spread where it reads cleaner than `.Concat`.
+- `async`/`await` everywhere I/O happens. No `.Result`, no `.Wait()`, no sync-over-async. Use `IAsyncEnumerable<T>` where streaming makes sense.
 - Nullability enabled. `?` and `!` used correctly. Never use `#nullable disable` to silence warnings.
 - `var` when the type is obvious from the right-hand side; explicit type otherwise.
-- No Hungarian notation. No `_field` underscores for private fields — name them like properties (`field`, not `_field`). Exception: backing fields for explicitly implemented properties.
+- No Hungarian notation. No `_field` underscores for private fields — use the `field` keyword inside property accessors when a backing store is needed; otherwise plain auto-properties.
 - One public type per file. File name matches type name.
 - Prefer composition over inheritance. Sealed by default; open up only when needed.
+- Reach for `System.Text.Json` source generators, `LoggerMessage` source generators, and other roll-forward-friendly mechanisms instead of reflection.
 
 ### Testing
 
