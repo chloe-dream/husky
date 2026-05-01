@@ -75,17 +75,22 @@ public sealed class MessageEnvelopeJsonTests
     [Fact]
     public void Pong_payload_round_trips_through_json()
     {
-        JsonElement details = JsonDocument.Parse("""{"queue":3,"guilds":12}""").RootElement;
+        Dictionary<string, JsonElement> details = new()
+        {
+            ["queue"] = JsonSerializer.SerializeToElement(3),
+            ["guilds"] = JsonSerializer.SerializeToElement(12),
+        };
         PongPayload original = new("healthy", details);
 
         string json = JsonSerializer.Serialize(original, HuskyJsonContext.Default.PongPayload);
         PongPayload? parsed = JsonSerializer.Deserialize(json, HuskyJsonContext.Default.PongPayload);
 
+        Assert.Equal("""{"status":"healthy","details":{"queue":3,"guilds":12}}""", json);
         Assert.NotNull(parsed);
         Assert.Equal("healthy", parsed!.Status);
         Assert.NotNull(parsed.Details);
-        Assert.Equal(3, parsed.Details!.Value.GetProperty("queue").GetInt32());
-        Assert.Equal(12, parsed.Details.Value.GetProperty("guilds").GetInt32());
+        Assert.Equal(3, parsed.Details!["queue"].GetInt32());
+        Assert.Equal(12, parsed.Details["guilds"].GetInt32());
     }
 
     [Fact]

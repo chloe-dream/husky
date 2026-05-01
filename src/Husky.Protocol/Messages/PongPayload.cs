@@ -4,4 +4,4 @@ namespace Husky.Protocol;
 
 public sealed record PongPayload(
     string Status,
-    JsonElement? Details);
+    IReadOnlyDictionary<string, JsonElement>? Details);
