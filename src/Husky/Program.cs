@@ -1,11 +1,16 @@
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Text;
 using Husky;
 using Husky.Protocol;
 
 const int ExitOk = 0;
 const int ExitGeneric = 1;
 const int ExitConfigError = 2;
+
+// The banner art uses Unicode block characters; force UTF-8 so Windows
+// consoles on legacy code pages render them instead of '?'.
+Console.OutputEncoding = Encoding.UTF8;
 
 string launcherDir = AppContext.BaseDirectory;
 string configPath = Path.Combine(launcherDir, HuskyConfigLoader.DefaultFileName);
