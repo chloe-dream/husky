@@ -1,0 +1,11 @@
+<Project>
+  <!-- Inherit common settings from the repo-root Directory.Build.props.
+       Without this explicit import the closest-wins lookup stops here and
+       the root file is shadowed entirely. -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <PropertyGroup>
+    <IsTestProject>true</IsTestProject>
+    <NoWarn>$(NoWarn);CA1707</NoWarn>
+  </PropertyGroup>
+</Project>
