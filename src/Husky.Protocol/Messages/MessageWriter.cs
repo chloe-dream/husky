@@ -12,26 +12,20 @@ public sealed class MessageWriter(Stream stream, bool leaveOpen = false) : IAsyn
 
     public async Task WriteAsync(MessageEnvelope envelope, CancellationToken cancellationToken = default)
     {
+        // No FlushAsync after writes: on NamedPipe the Flush blocks until the
+        // other side has read all buffered bytes, which deadlocks any flow that
+        // writes without an immediate symmetric read. The OS pipe buffer takes
+        // care of delivery; readers see complete lines as soon as they read.
         byte[] payload = JsonSerializer.SerializeToUtf8Bytes(envelope, HuskyJsonContext.Default.MessageEnvelope);
         await stream.WriteAsync(payload, cancellationToken).ConfigureAwait(false);
         await stream.WriteAsync(NewLine, cancellationToken).ConfigureAwait(false);
-        await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async ValueTask DisposeAsync()
     {
-        try
+        if (!leaveOpen)
         {
-            await stream.FlushAsync().ConfigureAwait(false);
-        }
-        catch (IOException) { /* best-effort flush during dispose */ }
-        catch (InvalidOperationException) { /* pipe already disconnected (covers ObjectDisposedException) */ }
-        finally
-        {
-            if (!leaveOpen)
-            {
-                await stream.DisposeAsync().ConfigureAwait(false);
-            }
+            await stream.DisposeAsync().ConfigureAwait(false);
         }
     }
 }
