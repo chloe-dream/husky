@@ -20,7 +20,7 @@ Husky is **not** enterprise software. It is an indie tool with personality.
 
 - **Pragmatic but sexy.** Things should work, and they should feel cool. Not "look at all my abstractions."
 - **Minimal by default.** Every config knob, every interface, every layer is a tax. Skip what is not needed *now*. The spec is small on purpose.
-- **Modern .NET.** .NET 9, `async`/`await`, records, primary constructors, file-scoped namespaces, collection expressions, pattern matching — the new stuff is the default.
+- **Modern .NET.** .NET 10, `async`/`await`, records, primary constructors, file-scoped namespaces, collection expressions, pattern matching — the new stuff is the default.
 - **Cross-platform.** Windows-first, Linux must work. macOS is a nice-to-have.
 - **Charming.** Husky speaks. See [LEASH §10.4](./LEASH.md#104-husky-voice).
 

@@ -108,8 +108,8 @@ Husky.sln
 
 ### 2.4 Target Framework
 
-- **.NET 9.0**, with migration to .NET 10 once GA.
-- No LTS bias.
+- **.NET 10.0** (LTS, GA since November 2025).
+- No LTS bias for its own sake — we just happen to be on the current release.
 
 ---
 
@@ -795,7 +795,7 @@ Output: a single binary `Husky.exe` (Windows) or `Husky` (Linux).
 ### 13.2 Husky.Client (NuGet)
 
 - Standard `dotnet pack -c Release`.
-- Multi-targeting `net9.0` (later `net10.0` to be added).
+- Single-target `net10.0` for v1. Add older targets only if a hosted app explicitly needs them — there is no preemptive multi-targeting.
 - `Husky.Protocol` as a project reference, packed into the NuGet (or shipped as a separate package — decide at actual release time).
 
 ### 13.3 Versioning
