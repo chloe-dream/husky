@@ -15,6 +15,7 @@ internal sealed class LauncherRuntime(
 {
     private readonly object sessionGate = new();
     private AppSession? currentSession;
+    private TaskCompletionSource<bool>? updateInFlight;
     private readonly TaskCompletionSource declaredDeadTrigger = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public async Task<int> RunAsync(CancellationToken graceful, CancellationToken hardKill)
@@ -103,7 +104,6 @@ internal sealed class LauncherRuntime(
             AppSession? session = CurrentSession;
             if (session is null)
             {
-                // No active session and no restart pending — we're done.
                 ConsoleOutput.Husky("enough. lying down.");
                 return ExitCodes.Generic;
             }
@@ -115,24 +115,40 @@ internal sealed class LauncherRuntime(
             if (winner == gracefulWait)
             {
                 ConsoleOutput.Husky("asking app to sit.");
-                await GracefulShutdown.StopAsync(
-                    session,
-                    reason: "launcher-stopping",
-                    shutdownTimeout: TimeSpan.FromSeconds(config.ShutdownTimeoutSec),
-                    killAfter: TimeSpan.FromSeconds(config.KillAfterSec),
-                    hardKill: hardKill).ConfigureAwait(false);
+                AppSession? alive = CurrentSession;
+                if (alive is not null && !alive.HasExited)
+                {
+                    await GracefulShutdown.StopAsync(
+                        alive,
+                        reason: "launcher-stopping",
+                        shutdownTimeout: TimeSpan.FromSeconds(config.ShutdownTimeoutSec),
+                        killAfter: TimeSpan.FromSeconds(config.KillAfterSec),
+                        hardKill: hardKill).ConfigureAwait(false);
+                }
                 return ExitCodes.Ok;
             }
 
             if (winner == deadWait)
             {
-                // Watchdog already invoked Kill(); wait briefly for the exit
-                // to settle so the restart path sees HasExited == true.
                 try { await session.ExitTask.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false); }
                 catch (TimeoutException) { }
             }
 
-            // Session ended (clean exit, crash, or watchdog kill).
+            // Session ended. If an update is driving this exit, hand control
+            // back to the polling tick — it owns the next session.
+            Task<bool>? updateAwait = TakeUpdateInFlight();
+            if (updateAwait is not null)
+            {
+                bool updateOk;
+                try { updateOk = await updateAwait.ConfigureAwait(false); }
+                catch { updateOk = false; }
+
+                if (updateOk && CurrentSession is not null) continue;
+
+                // Update aborted with no fresh session — fall through to the
+                // crash path so the restart policy applies.
+            }
+
             int exitCode = session.ExitCode;
             await DisposeCurrentSessionAsync().ConfigureAwait(false);
 
@@ -147,7 +163,6 @@ internal sealed class LauncherRuntime(
             if (!restartPolicy.CanRestart())
             {
                 ConsoleOutput.Husky("enough. lying down.");
-                // Loop instead of exiting so a later update can still bring us back.
                 await ParkUntilUpdateOrInterruptAsync(graceful).ConfigureAwait(false);
                 return ExitCodes.Ok;
             }
@@ -175,9 +190,6 @@ internal sealed class LauncherRuntime(
 
     private static async Task ParkUntilUpdateOrInterruptAsync(CancellationToken graceful)
     {
-        // Broken state: the launcher idles, polling continues in the
-        // scheduler, and a successful update flips us back into a running
-        // session. For now we just wait for the graceful trigger.
         try { await AwaitCancellationAsync(graceful).ConfigureAwait(false); }
         catch (OperationCanceledException) { }
     }
@@ -206,6 +218,7 @@ internal sealed class LauncherRuntime(
         if (update is null) return;
 
         ConsoleOutput.Husky($"new version found: v{update.Version}");
+        TaskCompletionSource<bool> mark = StartUpdate();
         try
         {
             await updateFlow.RunAsync(
@@ -214,15 +227,18 @@ internal sealed class LauncherRuntime(
                 startAppAndAwaitHelloAsync: c => RestartAfterUpdateAsync(c),
                 ct: ct).ConfigureAwait(false);
             restartPolicy.Reset();
+            mark.TrySetResult(true);
         }
         catch (UpdateException ex)
         {
             ConsoleOutput.Husky($"update aborted: {ex.Message}");
+            mark.TrySetResult(false);
         }
-        catch (OperationCanceledException) { /* graceful shutdown */ }
+        catch (OperationCanceledException) { mark.TrySetResult(false); }
         catch (Exception ex)
         {
             ConsoleOutput.Husky($"update aborted: {ex.Message}");
+            mark.TrySetResult(false);
         }
     }
 
@@ -236,14 +252,12 @@ internal sealed class LauncherRuntime(
         await updateFlow.RunAsync(
             update,
             stopAppAsync: _ => Task.CompletedTask,
-            startAppAndAwaitHelloAsync: _ => Task.CompletedTask, // app start happens after bootstrap returns
+            startAppAndAwaitHelloAsync: _ => Task.CompletedTask,
             ct: ct).ConfigureAwait(false);
     }
 
     private async Task ApplyUpdateAtBootAsync(UpdateInfo update, CancellationToken ct)
     {
-        // Update found before app start — same shape as bootstrap, app start
-        // happens afterwards at the top of the runtime loop.
         await updateFlow.RunAsync(
             update,
             stopAppAsync: _ => Task.CompletedTask,
@@ -298,6 +312,24 @@ internal sealed class LauncherRuntime(
     private void SetCurrentSession(AppSession session)
     {
         lock (sessionGate) currentSession = session;
+    }
+
+    private TaskCompletionSource<bool> StartUpdate()
+    {
+        TaskCompletionSource<bool> tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        lock (sessionGate) updateInFlight = tcs;
+        return tcs;
+    }
+
+    private Task<bool>? TakeUpdateInFlight()
+    {
+        TaskCompletionSource<bool>? tcs;
+        lock (sessionGate)
+        {
+            tcs = updateInFlight;
+            updateInFlight = null;
+        }
+        return tcs?.Task;
     }
 
     private async Task DisposeCurrentSessionAsync()
