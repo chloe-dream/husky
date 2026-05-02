@@ -4,6 +4,7 @@ const string ModeEnvVar = "HUSKY_TESTAPP_MODE";
 const string ModeNormal = "normal";
 const string ModeSlowShutdown = "slow-shutdown";
 const string ModeWait = "wait";
+const string ModeCrash = "crash";
 
 string mode = Environment.GetEnvironmentVariable(ModeEnvVar) ?? ModeNormal;
 
@@ -29,6 +30,14 @@ if (!HuskyClient.IsHosted)
 }
 
 await using HuskyClient client = await HuskyClient.AttachAsync();
+
+if (mode == ModeCrash)
+{
+    Console.Out.WriteLine("testapp: crash mode — exiting with code 7.");
+    Console.Out.Flush();
+    await Task.Delay(TimeSpan.FromMilliseconds(50));
+    return 7;
+}
 
 switch (mode)
 {
