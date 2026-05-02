@@ -52,7 +52,7 @@ internal sealed class Watchdog : IAsyncDisposable
             {
                 try
                 {
-                    await Task.Delay(options.TickInterval, ct).ConfigureAwait(false);
+                    await Task.Delay(options.TickInterval, clock, ct).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) { return; }
 

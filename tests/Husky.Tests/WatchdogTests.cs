@@ -13,6 +13,7 @@ public sealed class WatchdogTests
     [Fact]
     public async Task Watchdog_does_not_ping_when_activity_keeps_arriving()
     {
+        Microsoft.Extensions.Time.Testing.FakeTimeProvider time = new();
         int pingCount = 0;
         await using Watchdog watchdog = new(
             sendPing: (_, _) =>
@@ -20,16 +21,18 @@ public sealed class WatchdogTests
                 Interlocked.Increment(ref pingCount);
                 return Task.FromResult(true);
             },
-            options: FastOptions);
+            options: FastOptions,
+            clock: time);
 
         watchdog.Start();
 
-        // Keep recording activity faster than the idle window for a few cycles.
-        DateTime end = DateTime.UtcNow + TimeSpan.FromMilliseconds(400);
-        while (DateTime.UtcNow < end)
+        // Advance time in slices smaller than IdleWindow, recording activity
+        // before each slice — the loop must never see idle > IdleWindow.
+        for (int i = 0; i < 10; i++)
         {
             watchdog.RecordActivity();
-            await Task.Delay(30);
+            time.Advance(TimeSpan.FromMilliseconds(80));
+            await Task.Yield(); // let the loop wake from its TimeProvider delay
         }
 
         Assert.Equal(0, Volatile.Read(ref pingCount));
