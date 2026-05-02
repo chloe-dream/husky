@@ -37,6 +37,7 @@ public sealed class HuskyConfigLoaderTests
         Assert.Equal(SourceConfig.GitHubType, config.Source.Type);
         Assert.Equal("chloe/umbrella-bot", config.Source.Repo);
         Assert.Equal("UmbrellaBot-{version}.zip", config.Source.Asset);
+        Assert.False(config.Source.AllowPreRelease);
         Assert.Equal(HuskyConfig.DefaultCheckMinutes, config.CheckMinutes);
         Assert.Equal(HuskyConfig.DefaultShutdownTimeoutSec, config.ShutdownTimeoutSec);
         Assert.Equal(HuskyConfig.DefaultKillAfterSec, config.KillAfterSec);
@@ -76,6 +77,26 @@ public sealed class HuskyConfigLoaderTests
 
         Assert.Equal(SourceConfig.HttpType, config.Source.Type);
         Assert.Equal("https://example.invalid/manifest.json", config.Source.Manifest);
+    }
+
+    [Fact]
+    public void Parse_reads_allow_pre_release_when_set()
+    {
+        string json = """
+            {
+              "name": "x",
+              "executable": "app/x.exe",
+              "source": {
+                "type": "github",
+                "repo": "x/y",
+                "asset": "x-{version}.zip",
+                "allowPreRelease": true
+              }
+            }
+            """;
+
+        HuskyConfig config = HuskyConfigLoader.Parse(json);
+        Assert.True(config.Source.AllowPreRelease);
     }
 
     [Theory]

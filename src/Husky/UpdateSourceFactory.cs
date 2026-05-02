@@ -22,7 +22,8 @@ internal static class UpdateSourceFactory
                 httpClient,
                 config.Repo ?? throw new HuskyConfigException("source.repo is required for github."),
                 config.Asset ?? throw new HuskyConfigException("source.asset is required for github."),
-                launcherVersion),
+                launcherVersion,
+                allowPreRelease: config.AllowPreRelease),
             SourceConfig.HttpType => new HttpUpdateSource(
                 httpClient,
                 new Uri(config.Manifest ?? throw new HuskyConfigException("source.manifest is required for http.")),

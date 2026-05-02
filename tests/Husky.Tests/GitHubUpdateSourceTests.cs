@@ -89,6 +89,63 @@ public sealed class GitHubUpdateSourceTests
     }
 
     [Fact]
+    public async Task CheckForUpdateAsync_skips_prereleases_by_default()
+    {
+        await using FakeHttpServer server = FakeHttpServer.StartEmpty();
+        server.MapJson("/repos/x/y/releases/latest", """
+            {
+              "tag_name": "v2.0.0",
+              "prerelease": true,
+              "assets": [{ "name": "pkg-2.0.0.zip", "browser_download_url": "http://localhost/pkg.zip" }]
+            }
+            """);
+
+        using HttpClient http = new();
+        GitHubUpdateSource source = new(http, server.Address, "x/y", "pkg-{version}.zip", "0.1.0");
+
+        Assert.Null(await source.CheckForUpdateAsync("1.0.0", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task CheckForUpdateAsync_skips_semver_prerelease_tags_by_default()
+    {
+        await using FakeHttpServer server = FakeHttpServer.StartEmpty();
+        server.MapJson("/repos/x/y/releases/latest", """
+            {
+              "tag_name": "v2.0.0-rc.1",
+              "prerelease": false,
+              "assets": [{ "name": "pkg-2.0.0-rc.1.zip", "browser_download_url": "http://localhost/pkg.zip" }]
+            }
+            """);
+
+        using HttpClient http = new();
+        GitHubUpdateSource source = new(http, server.Address, "x/y", "pkg-{version}.zip", "0.1.0");
+
+        Assert.Null(await source.CheckForUpdateAsync("1.0.0", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task CheckForUpdateAsync_returns_prerelease_when_explicitly_allowed()
+    {
+        await using FakeHttpServer server = FakeHttpServer.StartEmpty();
+        server.MapJson("/repos/x/y/releases/latest", """
+            {
+              "tag_name": "v2.0.0-beta",
+              "prerelease": true,
+              "assets": [{ "name": "pkg-2.0.0-beta.zip", "browser_download_url": "http://localhost/pkg.zip" }]
+            }
+            """);
+
+        using HttpClient http = new();
+        GitHubUpdateSource source = new(
+            http, server.Address, "x/y", "pkg-{version}.zip", "0.1.0", allowPreRelease: true);
+
+        UpdateInfo? update = await source.CheckForUpdateAsync("1.0.0", CancellationToken.None);
+        Assert.NotNull(update);
+        Assert.Equal("2.0.0-beta", update!.Version);
+    }
+
+    [Fact]
     public async Task CheckForUpdateAsync_skips_drafts()
     {
         await using FakeHttpServer server = FakeHttpServer.StartEmpty();

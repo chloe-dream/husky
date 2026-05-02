@@ -15,13 +15,15 @@ internal sealed class GitHubUpdateSource(
     Uri apiBase,
     string repo,
     string assetPattern,
-    string launcherVersion) : IUpdateSource
+    string launcherVersion,
+    bool allowPreRelease = false) : IUpdateSource
 {
     public const string DefaultApiBase = "https://api.github.com/";
     public const string VersionPlaceholder = "{version}";
 
-    public GitHubUpdateSource(HttpClient httpClient, string repo, string assetPattern, string launcherVersion)
-        : this(httpClient, new Uri(DefaultApiBase), repo, assetPattern, launcherVersion)
+    public GitHubUpdateSource(
+        HttpClient httpClient, string repo, string assetPattern, string launcherVersion, bool allowPreRelease = false)
+        : this(httpClient, new Uri(DefaultApiBase), repo, assetPattern, launcherVersion, allowPreRelease)
     {
     }
 
@@ -45,10 +47,16 @@ internal sealed class GitHubUpdateSource(
             ?? throw new UpdateException("GitHub returned an empty response body.");
 
         if (release.Draft) return null;
+        if (release.PreRelease && !allowPreRelease) return null;
         if (string.IsNullOrWhiteSpace(release.TagName)) return null;
 
         string remoteVersion = StripVersionPrefix(release.TagName);
         if (!SemanticVersion.TryParse(remoteVersion, out SemanticVersion remote)) return null;
+
+        // Even if the GitHub flag isn't set, a SemVer pre-release suffix
+        // (-beta, -rc.1) marks an unstable build — same opt-in rule.
+        if (remote.PreRelease.Length > 0 && !allowPreRelease) return null;
+
         if (!SemanticVersion.TryParse(currentVersion, out SemanticVersion current)) return null;
         if (remote <= current) return null;
 
