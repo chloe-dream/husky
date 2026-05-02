@@ -49,6 +49,6 @@ Husky and Husky.Client must share the same wire-protocol version. The handshake 
 
 ## License
 
-TBD — same as the launcher.
+MIT — © 2026 Chloe Bernette. Same as the launcher.
 
 🐺 *woof.*
