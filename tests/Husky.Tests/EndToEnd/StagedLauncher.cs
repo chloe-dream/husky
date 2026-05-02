@@ -50,16 +50,18 @@ internal sealed class StagedLauncher : IAsyncDisposable
         return new StagedLauncher(root, launcherFile, configPath, appDir, appRelative);
     }
 
-    public void WriteDefaultConfig(string name = "smoke-app")
+    public void WriteDefaultConfig(string name = "smoke-app", string? manifestUrl = null)
     {
+        // Default: an http manifest the test owns so we never reach the
+        // public network. Callers can override the URL.
+        string url = manifestUrl ?? "http://127.0.0.1:1/manifest.json";
         WriteConfig($$"""
             {
               "name": "{{name}}",
               "executable": "{{AppRelativeExecutable}}",
               "source": {
-                "type": "github",
-                "repo": "x/y",
-                "asset": "y-{version}.zip"
+                "type": "http",
+                "manifest": "{{url}}"
               }
             }
             """);

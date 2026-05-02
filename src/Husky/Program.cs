@@ -2,11 +2,6 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using Husky;
-using Husky.Protocol;
-
-const int ExitOk = 0;
-const int ExitGeneric = 1;
-const int ExitConfigError = 2;
 
 // The banner art uses Unicode block characters; force UTF-8 so Windows
 // consoles on legacy code pages render them instead of '?'.
@@ -26,204 +21,92 @@ try
 catch (HuskyConfigException ex)
 {
     ConsoleOutput.Husky($"config error: {ex.Message}");
-    return ExitConfigError;
+    return ExitCodes.ConfigError;
 }
 
 string executablePath = Path.GetFullPath(Path.Combine(launcherDir, config.Executable));
-if (!File.Exists(executablePath))
-{
-    // Bootstrap mode (LEASH §5.3.5) is wired up in step 7 once a source provider exists.
-    ConsoleOutput.Husky($"executable not found: {executablePath}");
-    return ExitConfigError;
-}
+string installDirectory = launcherDir;
 
-string pipeName = PipeNaming.Generate();
+using HttpClient httpClient = BuildHttpClient(launcherVersion);
 
-await using AppPipeServer pipeServer = AppPipeServer.Create(pipeName, launcherVersion);
-
-AppProcessOptions processOptions = new(
-    ExecutablePath: executablePath,
-    WorkingDirectory: Path.GetDirectoryName(executablePath)!,
-    Environment: new Dictionary<string, string?>
-    {
-        [HuskyEnvironment.PipeNameVariable] = pipeName,
-        [HuskyEnvironment.AppNameVariable] = config.Name,
-    });
-
-ConsoleOutput.Husky($"starting {config.Name}");
-
-// Late-bound activity sink: AppProcess.Start needs the stdout/stderr
-// callbacks now, but the watchdog isn't created until after the handshake.
-Action? recordActivity = null;
-
-AppProcess app;
+IUpdateSource source;
 try
 {
-    app = AppProcess.Start(
-        processOptions,
-        onStandardOutput: line => { recordActivity?.Invoke(); ConsoleOutput.AppOut(line); },
-        onStandardError: line => { recordActivity?.Invoke(); ConsoleOutput.AppErr(line); });
+    source = UpdateSourceFactory.Create(config.Source, httpClient, launcherVersion);
 }
-catch (Exception ex) when (ex is FileNotFoundException or InvalidOperationException)
+catch (HuskyConfigException ex)
 {
-    ConsoleOutput.Husky($"failed to start {config.Name}: {ex.Message}");
-    return ExitGeneric;
+    ConsoleOutput.Husky($"config error: {ex.Message}");
+    return ExitCodes.ConfigError;
 }
 
-await using (app)
-{
-    int sigintCount = 0;
-    using CancellationTokenSource gracefulTrigger = new();
-    using CancellationTokenSource hardKillTrigger = new();
+UpdateDownloader downloader = new(httpClient);
+using UpdateFlow updateFlow = new(downloader, installDirectory, config.Executable);
 
-    void OnInterrupt()
+AppSessionLauncher sessionLauncher = new(
+    executablePath: executablePath,
+    appName: config.Name,
+    launcherVersion: launcherVersion,
+    watchdogOptions: WatchdogOptions.Default,
+    onStandardOutput: ConsoleOutput.AppOut,
+    onStandardError: ConsoleOutput.AppErr);
+
+RestartPolicy restartPolicy = new(
+    maxAttemptsPerHour: config.RestartAttempts,
+    pauseBetweenAttempts: TimeSpan.FromSeconds(config.RestartPauseSec));
+
+LauncherRuntime runtime = new(
+    config: config,
+    source: source,
+    updateFlow: updateFlow,
+    sessionLauncher: sessionLauncher,
+    restartPolicy: restartPolicy,
+    executablePath: executablePath);
+
+int sigintCount = 0;
+using CancellationTokenSource gracefulTrigger = new();
+using CancellationTokenSource hardKillTrigger = new();
+
+void OnInterrupt()
+{
+    int n = Interlocked.Increment(ref sigintCount);
+    try
     {
-        int n = Interlocked.Increment(ref sigintCount);
-        try
-        {
-            if (n == 1) gracefulTrigger.Cancel();
-            else hardKillTrigger.Cancel();
-        }
-        catch (ObjectDisposedException) { /* shutting down already */ }
+        if (n == 1) gracefulTrigger.Cancel();
+        else hardKillTrigger.Cancel();
     }
+    catch (ObjectDisposedException) { /* shutting down */ }
+}
 
-    ConsoleCancelEventHandler ctrlCHandler = (_, args) =>
+ConsoleCancelEventHandler ctrlCHandler = (_, args) =>
+{
+    args.Cancel = true;
+    OnInterrupt();
+};
+Console.CancelKeyPress += ctrlCHandler;
+
+using PosixSignalRegistration sigtermReg = PosixSignalRegistration.Create(
+    PosixSignal.SIGTERM,
+    ctx =>
     {
-        args.Cancel = true;
+        ctx.Cancel = true;
         OnInterrupt();
-    };
-    Console.CancelKeyPress += ctrlCHandler;
+    });
 
-    using PosixSignalRegistration sigtermReg = PosixSignalRegistration.Create(
-        PosixSignal.SIGTERM,
-        ctx =>
-        {
-            ctx.Cancel = true;
-            OnInterrupt();
-        });
-
-    try
-    {
-        try
-        {
-            await pipeServer.AcceptAndHandshakeAsync(connectTimeout: TimeSpan.FromSeconds(30));
-        }
-        catch (Exception ex)
-        {
-            ConsoleOutput.Husky($"handshake failed: {ex.Message}");
-            app.Kill();
-            return ExitGeneric;
-        }
-
-        ConnectedApp connected = pipeServer.ConnectedApp!;
-        ConsoleOutput.Husky(
-            $"{connected.Name} v{connected.Version} attached (pid={connected.Pid})");
-
-        await using Watchdog watchdog = new(pipeServer.SendPingAsync, WatchdogOptions.Default);
-        pipeServer.OnActivity = watchdog.RecordActivity;
-        recordActivity = watchdog.RecordActivity;
-        watchdog.OnAppDeclaredDead = () =>
-        {
-            ConsoleOutput.Husky("no answer. growling.");
-            app.Kill();
-        };
-        watchdog.Start();
-
-        Task graceful = AwaitCancellationAsync(gracefulTrigger.Token);
-        Task winner = await Task.WhenAny(app.ExitTask, graceful);
-
-        if (winner == app.ExitTask)
-        {
-            ConsoleOutput.Husky($"{config.Name} exited with code {app.ExitCode}");
-            return app.ExitCode;
-        }
-
-        // Stop the watchdog before the graceful shutdown sequence — the launcher
-        // is now driving the conversation, and a probe in flight here would
-        // race the shutdown handshake.
-        await watchdog.DisposeAsync();
-
-        ConsoleOutput.Husky("asking app to sit.");
-        await StopAppGracefullyAsync(app, pipeServer, config, hardKillTrigger.Token);
-        return ExitOk;
-    }
-    finally
-    {
-        Console.CancelKeyPress -= ctrlCHandler;
-    }
+try
+{
+    return await runtime.RunAsync(gracefulTrigger.Token, hardKillTrigger.Token).ConfigureAwait(false);
+}
+finally
+{
+    Console.CancelKeyPress -= ctrlCHandler;
 }
 
-static async Task StopAppGracefullyAsync(
-    AppProcess app, AppPipeServer pipeServer, HuskyConfig config, CancellationToken hardKill)
+static HttpClient BuildHttpClient(string launcherVersion)
 {
-    if (hardKill.IsCancellationRequested)
-    {
-        await HardKillAsync(app, "double interrupt — taking it down.");
-        return;
-    }
-
-    try
-    {
-        await pipeServer.SendShutdownAsync(
-            reason: "launcher-stopping",
-            totalTimeout: TimeSpan.FromSeconds(config.ShutdownTimeoutSec),
-            ackTimeout: TimeSpan.FromSeconds(5),
-            ct: hardKill);
-    }
-    catch (TimeoutException) { ConsoleOutput.Husky("no shutdown-ack — continuing anyway."); }
-    catch (IOException) { ConsoleOutput.Husky("pipe is gone — proceeding to wait."); }
-    catch (OperationCanceledException) when (hardKill.IsCancellationRequested)
-    {
-        await HardKillAsync(app, "double interrupt — taking it down.");
-        return;
-    }
-
-    if (await TryWaitForExitAsync(app, TimeSpan.FromSeconds(config.ShutdownTimeoutSec), hardKill))
-    {
-        ConsoleOutput.Husky("app sat down.");
-        return;
-    }
-    if (hardKill.IsCancellationRequested)
-    {
-        await HardKillAsync(app, "double interrupt — taking it down.");
-        return;
-    }
-
-    if (config.KillAfterSec > 0
-        && await TryWaitForExitAsync(app, TimeSpan.FromSeconds(config.KillAfterSec), hardKill))
-    {
-        ConsoleOutput.Husky("app sat down.");
-        return;
-    }
-
-    await HardKillAsync(app, "app didn't respond. growling.");
-}
-
-static async Task<bool> TryWaitForExitAsync(AppProcess app, TimeSpan timeout, CancellationToken hardKill)
-{
-    try
-    {
-        await app.ExitTask.WaitAsync(timeout, hardKill);
-        return true;
-    }
-    catch (TimeoutException) { return false; }
-    catch (OperationCanceledException) { return false; }
-}
-
-static async Task HardKillAsync(AppProcess app, string message)
-{
-    ConsoleOutput.Husky(message);
-    app.Kill();
-    try { await app.ExitTask.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false); }
-    catch (TimeoutException) { /* swallow — we're tearing down */ }
-    catch (OperationCanceledException) { /* normal */ }
-}
-
-static async Task AwaitCancellationAsync(CancellationToken token)
-{
-    TaskCompletionSource tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    await using CancellationTokenRegistration _ = token.Register(() => tcs.TrySetResult());
-    await tcs.Task.ConfigureAwait(false);
+    HttpClient client = new() { Timeout = TimeSpan.FromMinutes(5) };
+    client.DefaultRequestHeaders.UserAgent.ParseAdd($"Husky/{launcherVersion}");
+    return client;
 }
 
 static string GetLauncherVersion()
@@ -233,4 +116,11 @@ static string GetLauncherVersion()
     return string.IsNullOrWhiteSpace(info)
         ? asm.GetName().Version?.ToString() ?? "0.0.0"
         : info;
+}
+
+internal static class ExitCodes
+{
+    public const int Ok = 0;
+    public const int Generic = 1;
+    public const int ConfigError = 2;
 }

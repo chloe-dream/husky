@@ -13,11 +13,10 @@ public sealed class LauncherLifecycleTests
         ConcurrentQueue<string> stdoutLines = new();
         System.Diagnostics.Process launcher = staged.Start(onStandardOutput: stdoutLines.Enqueue);
 
-        // Banner line, "starting smoke-app", forwarded "testapp: ready", and finally
-        // the "attached" log line all flow over stdout once the handshake completes.
-        // (Spectre.Console may wrap long lines across multiple stdout lines on narrow
-        // virtual terminals — match each fragment independently.)
-        await WaitForFragmentAsync(stdoutLines, "attached", TimeSpan.FromSeconds(20));
+        // After the handshake the launcher logs "<name> v<version> is up.".
+        // Spectre.Console may wrap long lines across multiple stdout lines on
+        // narrow virtual terminals — match each fragment independently.
+        await WaitForFragmentAsync(stdoutLines, "is up", TimeSpan.FromSeconds(30));
 
         Assert.Contains(stdoutLines, line =>
             line.Contains("starting smoke-app", StringComparison.Ordinal));
@@ -41,24 +40,25 @@ public sealed class LauncherLifecycleTests
     }
 
     [Fact]
-    public async Task Launcher_exits_with_code_2_when_executable_path_does_not_exist()
+    public async Task Launcher_exits_with_code_2_when_bootstrap_source_is_unreachable()
     {
         await using StagedLauncher staged = StagedLauncher.Create();
-        staged.WriteConfig("""
+        // No app present + no reachable manifest → bootstrap fails → exit 2.
+        File.Delete(staged.AppExecutablePath);
+        staged.WriteConfig($$"""
             {
               "name": "smoke-app",
-              "executable": "app/does-not-exist.exe",
+              "executable": "{{staged.AppRelativeExecutable}}",
               "source": {
-                "type": "github",
-                "repo": "x/y",
-                "asset": "y-{version}.zip"
+                "type": "http",
+                "manifest": "http://127.0.0.1:1/missing.json"
               }
             }
             """);
 
         System.Diagnostics.Process launcher = staged.Start();
 
-        await launcher.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(15));
+        await launcher.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
 
         Assert.Equal(2, launcher.ExitCode);
     }
