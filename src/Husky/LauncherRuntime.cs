@@ -119,6 +119,18 @@ internal sealed class LauncherRuntime(
 
             if (winner == gracefulWait)
             {
+                // If a polling-tick update is mid-flight, let it finish (or
+                // tear it down via the hard-kill token on a double Ctrl+C)
+                // before we drive our own shutdown — otherwise we'd race
+                // StopCurrentSessionAsync with a duplicate stop.
+                Task<bool>? pending = PeekUpdateInFlight();
+                if (pending is not null)
+                {
+                    ConsoleOutput.Husky("update in flight — letting it finish before we sit.");
+                    try { await pending.WaitAsync(hardKill).ConfigureAwait(false); }
+                    catch (OperationCanceledException) when (hardKill.IsCancellationRequested) { /* fall through */ }
+                }
+
                 ConsoleOutput.Husky("asking app to sit.");
                 AppSession? alive = CurrentSession;
                 if (alive is not null && !alive.HasExited)
@@ -363,6 +375,11 @@ internal sealed class LauncherRuntime(
             updateInFlight = null;
         }
         return tcs?.Task;
+    }
+
+    private Task<bool>? PeekUpdateInFlight()
+    {
+        lock (sessionGate) return updateInFlight?.Task;
     }
 
     private async Task DisposeCurrentSessionAsync()
