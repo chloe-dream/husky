@@ -45,6 +45,7 @@ public sealed class BootstrapEndToEndTests
 
         Assert.Contains(stdoutLines, l => l.Contains("bootstrapping", StringComparison.Ordinal));
         Assert.Contains(stdoutLines, l => l.Contains("new version found", StringComparison.Ordinal));
+        Assert.Contains(stdoutLines, l => l.Contains("update succeeded", StringComparison.Ordinal));
         Assert.Contains(stdoutLines, l => l.Contains("testapp: ready", StringComparison.Ordinal));
 
         Assert.True(File.Exists(staged.AppExecutablePath), "TestApp executable should be installed after bootstrap.");

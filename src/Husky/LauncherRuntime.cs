@@ -28,15 +28,17 @@ internal sealed class LauncherRuntime(
         if (!installed)
         {
             ConsoleOutput.Husky("no app installed yet — bootstrapping.");
+            string installedVersion;
             try
             {
-                await BootstrapAsync(currentVersion, graceful).ConfigureAwait(false);
+                installedVersion = await BootstrapAsync(currentVersion, graceful).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
                 ConsoleOutput.Husky($"bootstrap failed: {ex.Message}");
                 return ExitCodes.ConfigError;
             }
+            ConsoleOutput.Husky($"update succeeded — now on v{installedVersion}");
             currentVersion = AppVersionReader.ReadCurrent(executablePath);
         }
         else
@@ -48,6 +50,7 @@ internal sealed class LauncherRuntime(
                 {
                     ConsoleOutput.Husky($"new version found: v{bootCheck.Version}");
                     await ApplyUpdateAtBootAsync(bootCheck, graceful).ConfigureAwait(false);
+                    ConsoleOutput.Husky($"update succeeded — now on v{bootCheck.Version}");
                     currentVersion = AppVersionReader.ReadCurrent(executablePath);
                 }
                 else
@@ -241,6 +244,7 @@ internal sealed class LauncherRuntime(
                 startAppAndAwaitHelloAsync: c => RestartAfterUpdateAsync(c),
                 ct: ct).ConfigureAwait(false);
             restartPolicy.Reset();
+            ConsoleOutput.Husky($"update succeeded — now on v{update.Version}");
             mark.TrySetResult(true);
         }
         catch (UpdateException ex)
@@ -256,7 +260,7 @@ internal sealed class LauncherRuntime(
         }
     }
 
-    private async Task BootstrapAsync(string currentVersion, CancellationToken ct)
+    private async Task<string> BootstrapAsync(string currentVersion, CancellationToken ct)
     {
         UpdateInfo? update = await source.CheckForUpdateAsync(currentVersion, ct).ConfigureAwait(false);
         if (update is null)
@@ -268,6 +272,7 @@ internal sealed class LauncherRuntime(
             stopAppAsync: _ => Task.CompletedTask,
             startAppAndAwaitHelloAsync: _ => Task.CompletedTask,
             ct: ct).ConfigureAwait(false);
+        return update.Version;
     }
 
     private async Task ApplyUpdateAtBootAsync(UpdateInfo update, CancellationToken ct)
