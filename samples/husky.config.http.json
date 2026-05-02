@@ -1,0 +1,15 @@
+{
+  "name": "umbrella-bot",
+  "executable": "app/UmbrellaBot.exe",
+
+  "source": {
+    "type": "http",
+    "manifest": "https://chloe.example/x7k3p2-9f4q/umbrella/manifest.json"
+  },
+
+  "checkMinutes": 60,
+  "shutdownTimeoutSec": 60,
+  "killAfterSec": 10,
+  "restartAttempts": 3,
+  "restartPauseSec": 30
+}

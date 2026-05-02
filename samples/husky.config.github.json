@@ -1,0 +1,17 @@
+{
+  "name": "umbrella-bot",
+  "executable": "app/UmbrellaBot.exe",
+
+  "source": {
+    "type": "github",
+    "repo": "chloe/umbrella-bot",
+    "asset": "UmbrellaBot-{version}.zip",
+    "allowPreRelease": false
+  },
+
+  "checkMinutes": 60,
+  "shutdownTimeoutSec": 60,
+  "killAfterSec": 10,
+  "restartAttempts": 3,
+  "restartPauseSec": 30
+}
