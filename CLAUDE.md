@@ -1,141 +1,67 @@
 # CLAUDE.md — Working on Husky
 
-> *Read this file first. Then read [LEASH.md](./LEASH.md). Then start work.*
+> *Read this first. Then [LEASH.md](./LEASH.md). Then start.*
 
----
+## Who you work for
 
-## Who you are working for
-
-You are working for **Chloe**. She is the developer and product owner of Husky.
-
-She communicates with you in **German**. All conversation, design discussions, clarifications, and status updates directed at her must be in German.
-
-The code you produce is **English-only**. See "Language" below for the strict rules — they are absolute.
-
----
+**Chloe** — developer and product owner. She talks to you in **German**; reply in German. Code is **English-only**.
 
 ## Project vibe
 
-Husky is **not** enterprise software. It is an indie tool with personality.
+Indie tool, not enterprise software. Pragmatic but sexy. Minimal by default — every knob, interface, and layer is a tax. Modern .NET 10 / C# 14 is the baseline. Windows-first, Linux must work, macOS nice-to-have. Husky has a voice — see [LEASH §10.4](./LEASH.md#104-husky-voice).
 
-- **Pragmatic but sexy.** Things should work, and they should feel cool. Not "look at all my abstractions."
-- **Minimal by default.** Every config knob, every interface, every layer is a tax. Skip what is not needed *now*. The spec is small on purpose.
-- **Modern .NET.** .NET 10, `async`/`await`, records, primary constructors, file-scoped namespaces, collection expressions, pattern matching — the new stuff is the default.
-- **Cross-platform.** Windows-first, Linux must work. macOS is a nice-to-have.
-- **Charming.** Husky speaks. See [LEASH §10.4](./LEASH.md#104-husky-voice).
+## Language — non-negotiable
 
----
-
-## Language
-
-This is non-negotiable.
-
-### German (with Chloe)
-
-- All replies, questions, and status updates directed at Chloe.
-- Suggestions, design discussions, clarification requests.
-- Anything she will read directly outside of source files.
-
-### English (everywhere else)
-
-- All identifiers (classes, methods, properties, fields, variables, parameters, namespaces, project names, file names).
-- All code comments (`//`, `/* */`, `///`).
-- All string literals: log lines, console output, exception messages, UI text.
-- README files, inline docs, API docs, JSON property names.
-- Test names and test descriptions.
-- Git commit messages (subject and body).
-
-**No mixed-language code.** Not a single German variable, not a single German comment, not a single German log line.
-
----
+- **German:** anything Chloe reads outside source files (replies, questions, status updates, design discussions).
+- **English:** all identifiers, comments, string literals, log lines, exception messages, UI text, READMEs, test names, commit messages.
+- **No mixed-language code.** Not one German variable, comment, or log line.
 
 ## How to work
 
-### When in doubt — ask
+**When in doubt, ask Chloe in German.** [LEASH.md](./LEASH.md) is the contract; if it is unclear, contradictory, or silent on something meaningful — ask. Do not invent design. Be specific: 2–3 options, recommend one with a one-line reason.
 
-[LEASH.md](./LEASH.md) is the contract. If something is unclear, contradictory, or silent on a meaningful question — **ask Chloe in German**. Do not invent design decisions. Scope creep is the enemy.
+Trivial choices (internal names, `List<T>` vs `IEnumerable<T>`, `private` vs `internal`) — pick the simpler option, move on. Anything Chloe sees (file layout, log-visible names, API shape, defaults) — ask.
 
-When you ask: be specific. Suggest 2–3 concrete options. Recommend one with a one-line reason. No open "what should I do?" questions — that wastes her time.
+### Code style
 
-### When the spec is silent on a small detail
+Write to current Microsoft .NET design guidelines and the newest stable C# (C# 14 on .NET 10). Prefer the newer idiom: primary constructors, collection expressions, `field` keyword, pattern matching, target-typed `new`, raw strings, `required`, `init`/`readonly`, file-scoped namespaces. No preview features — wait for GA.
 
-Trivial implementation choices (helper-method names, internal data-structure choices like `List<T>` vs `IEnumerable<T>`, whether a field is `private` or `internal`) — use your judgment, pick the simpler option, move on.
-
-If the choice could affect how Chloe uses or perceives the tool — file layout, naming visible in logs, API shape, defaults — **ask**.
-
-### Code style baseline
-
-**Always write to the latest .NET and C# guidance.** We track Microsoft's current .NET design guidelines and the newest stable C# language features (C# 14 on .NET 10 today; whatever ships next when the SDK moves). When a newer language feature replaces an older idiom — primary constructors over boilerplate ctors, collection expressions over `new List<T> { ... }`, `field` keyword over manual backing fields, pattern matching over chained `if`/`is`, target-typed `new` where the type is clear, raw string literals over escaped strings, `required` over runtime null-checks, `init`/`readonly` over mutable state, file-scoped namespaces, etc. — use the newer one by default. If a feature is not yet stable in the current SDK, do **not** preview it; wait for GA.
-
-The standing rules below are the load-bearing specifics; the "use modern C#" principle is the umbrella.
-
-- File-scoped namespaces.
-- Primary constructors where they reduce noise.
-- Records for immutable data; classes for behavior.
-- Collection expressions (`[..]`) for literals; spread where it reads cleaner than `.Concat`.
-- `async`/`await` everywhere I/O happens. No `.Result`, no `.Wait()`, no sync-over-async. Use `IAsyncEnumerable<T>` where streaming makes sense.
-- Nullability enabled. `?` and `!` used correctly. Never use `#nullable disable` to silence warnings.
-- `var` when the type is obvious from the right-hand side; explicit type otherwise.
-- No Hungarian notation. No `_field` underscores for private fields — use the `field` keyword inside property accessors when a backing store is needed; otherwise plain auto-properties.
-- One public type per file. File name matches type name.
-- Prefer composition over inheritance. Sealed by default; open up only when needed.
-- Reach for `System.Text.Json` source generators, `LoggerMessage` source generators, and other roll-forward-friendly mechanisms instead of reflection.
+- Records for data; classes for behavior. Sealed by default. Composition over inheritance.
+- `async`/`await` for all I/O. No `.Result`, `.Wait()`, sync-over-async. `IAsyncEnumerable<T>` where streaming fits.
+- Nullability on. Never `#nullable disable` to silence warnings.
+- `var` when the RHS makes the type obvious; explicit otherwise.
+- No Hungarian notation, no `_field` underscores — use the `field` keyword or plain auto-properties.
+- One public type per file; filename matches type.
+- `System.Text.Json` and `LoggerMessage` source generators over reflection.
 
 ### Testing
 
-- Test what is worth testing: protocol parsing, message dispatch, version comparison, source-provider URL building, watchdog state transitions, file operations on the update flow.
-- **Do not** test trivial getters/setters. Do not chase coverage percentages.
-- xUnit. FluentAssertions if it makes assertions noticeably cleaner.
-- Mock the pipe in unit tests. Use real pipes only in end-to-end tests.
+xUnit, FluentAssertions if it reads cleaner. Test what matters: protocol parsing, message dispatch, version comparison, source-provider URL building, watchdog state, update file ops. Skip trivial getters/setters; do not chase coverage. Mock the pipe in unit tests; real pipes only in E2E.
 
 ### Commits
 
-- All commit messages in **English**.
-- Small, focused commits. One logical change per commit.
-- Format: `<type>: <short summary>` where `<type>` is one of `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `build`.
-- Body optional but encouraged for non-trivial changes; explain *why*, not *what*.
+English. Small and focused, one logical change each. Format `<type>: <summary>` with `feat | fix | refactor | test | docs | chore | build`. Body explains *why*, not *what*.
 
-### Status updates to Chloe
+### Status updates (German)
 
-After completing a step from the implementation order, post a short status update **in German**:
+After each Appendix-A step: what's done, what's next, decisions you made or need Chloe on, anything skipped or compromised — flag it.
 
-- What is done.
-- What is next.
-- Any decisions that came up and how you resolved them (or that you need her to weigh in on).
-- Anything you skipped, deferred, or compromised on — flag it explicitly.
+## Never do
 
----
-
-## What you must never do
-
-- Add features that are not in [LEASH.md](./LEASH.md). If you think one is missing, **ask first**.
-- Add config options "for flexibility." See "Minimal by default."
-- Inject DI containers, mediator patterns, CQRS, or other ceremony into a 3-project tool.
-- Use `Microsoft.Extensions.Logging` for the launcher's user-facing console — that is [Spectre.Console](https://spectreconsole.net) territory. `Microsoft.Extensions.Logging` is fine for internal diagnostics if needed at all.
-- Pull in NuGet libraries casually. Each dependency is a maintenance burden and a security surface. If [LEASH.md](./LEASH.md) does not call a library out, **ask before adding it**.
-- Leave silent `TODO` comments in the code. If something is unfinished, mention it in the status update.
-- Use AI-flavored stylistic clichés in user-visible text ("delve into," "navigate the landscape of," etc.). Husky is curt. Plain words.
-
----
+- Add features not in [LEASH.md](./LEASH.md) — ask first.
+- Add config knobs "for flexibility."
+- Inject DI containers, mediators, CQRS into a 3-project tool.
+- Use `Microsoft.Extensions.Logging` for launcher user-facing output — that is [Spectre.Console](https://spectreconsole.net). MEL is fine for internal diagnostics only.
+- Add NuGet packages casually — if LEASH does not name it, ask.
+- Leave silent `TODO`s — surface them in the status update.
+- Use AI clichés in user-visible text ("delve into", "navigate the landscape of"). Husky is curt.
 
 ## Working order
 
-[LEASH §Appendix A](./LEASH.md#appendix-a--recommended-implementation-order) lists the recommended implementation order. Follow it unless you have a reason not to (in which case: ask).
-
-Per step:
-
-1. Implement.
-2. Write tests where they make sense.
-3. `dotnet build` and `dotnet test` — both must be green.
-4. Commit.
-5. Brief status update to Chloe in German.
-
----
+Follow [LEASH §Appendix A](./LEASH.md#appendix-a--recommended-implementation-order). Per step: implement → tests where useful → `dotnet build` and `dotnet test` both green → commit → German status update.
 
 ## Final note
 
-Husky is a side project that should feel like a craft. It does not have a deadline. Quality over speed.
-
-If you are about to cut a corner, **say so explicitly** — Chloe decides whether it is the right corner to cut.
+Side project, no deadline. Quality over speed. If you are cutting a corner, **say so** — Chloe decides if it is the right one.
 
 🐺 *woof.*
