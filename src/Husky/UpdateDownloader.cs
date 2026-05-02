@@ -60,12 +60,12 @@ internal sealed class UpdateDownloader(HttpClient httpClient)
 
                     if (OnProgress is { } sink && received - lastReported >= 256 * 1024)
                     {
-                        sink(received, total);
+                        InvokeProgress(sink, received, total);
                         lastReported = received;
                     }
                 }
 
-                OnProgress?.Invoke(received, total);
+                if (OnProgress is { } finalSink) InvokeProgress(finalSink, received, total);
             }
             finally
             {
@@ -89,6 +89,13 @@ internal sealed class UpdateDownloader(HttpClient httpClient)
             throw new UpdateException(
                 $"SHA-256 mismatch for {url}: expected {expected}, got {actual}.");
         }
+    }
+
+    private static void InvokeProgress(Action<long, long?> sink, long received, long? total)
+    {
+        // A misbehaving sink must not kill the download — swallow its errors.
+        try { sink(received, total); }
+        catch { /* progress is decorative, never load-bearing */ }
     }
 
     private static void TryDelete(string path)

@@ -44,6 +44,24 @@ public sealed class UpdateDownloaderTests
     }
 
     [Fact]
+    public async Task DownloadAsync_completes_when_progress_sink_throws()
+    {
+        using TempDirectory root = TempDirectory.Create();
+        string source = Path.Combine(root.Path, "package.zip");
+        await File.WriteAllBytesAsync(source, [1, 2, 3, 4, 5]);
+
+        await using FakeHttpServer server = FakeHttpServer.Start(root.Path);
+
+        using HttpClient client = new();
+        UpdateDownloader downloader = new(client) { OnProgress = (_, _) => throw new InvalidOperationException("boom") };
+        string target = Path.Combine(root.Path, "out.zip");
+
+        await downloader.DownloadAsync(server.Url("package.zip"), expectedSha256: null, target);
+
+        Assert.True(File.Exists(target));
+    }
+
+    [Fact]
     public async Task DownloadAsync_throws_and_deletes_target_when_sha256_mismatches()
     {
         using TempDirectory root = TempDirectory.Create();
