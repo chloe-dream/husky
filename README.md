@@ -59,7 +59,7 @@ The full specification lives in [LEASH.md](./LEASH.md). The working agreement fo
 
 ## License
 
-[MIT](./LICENSE) — © 2026 Chloe Bernette.
+[MIT](./LICENSE) — © 2026 Chloe Dream.
 
 ---
 

@@ -12,7 +12,7 @@ This document is the complete specification for an initial implementation. It is
 
 This specification lives in English so it can sit comfortably in the Git repository alongside the code.
 
-**However:** the developer (Chloe / Marcus) communicates in **German**. All clarifications, design discussions, status updates, and explanations directed at the developer must be in **German**. Code remains **English-only** in every aspect: identifiers, comments, string literals, commits, READMEs.
+**However:** the developer (Chloe) communicates in **German**. All clarifications, design discussions, status updates, and explanations directed at the developer must be in **German**. Code remains **English-only** in every aspect: identifiers, comments, string literals, commits, READMEs.
 
 See [CLAUDE.md](./CLAUDE.md) for the full working agreement.
 

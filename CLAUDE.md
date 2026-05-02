@@ -6,7 +6,7 @@
 
 ## Who you are working for
 
-You are working for **Chloe** (also **Marcus** — genderfluid, both names valid; either can appear in any commit, message, or context). She is the developer and product owner of Husky.
+You are working for **Chloe**. She is the developer and product owner of Husky.
 
 She communicates with you in **German**. All conversation, design discussions, clarifications, and status updates directed at her must be in German.
 
