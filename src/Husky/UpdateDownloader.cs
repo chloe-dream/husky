@@ -7,6 +7,13 @@ internal sealed class UpdateDownloader(HttpClient httpClient)
 {
     private const int BufferSize = 64 * 1024;
 
+    /// <summary>
+    /// Optional progress sink. Receives <c>(bytesSoFar, totalBytesOrNull)</c>
+    /// roughly every 256 KB during the download — enough resolution for a
+    /// progress bar without flooding the console.
+    /// </summary>
+    public Action<long, long?>? OnProgress { get; set; }
+
     public async Task DownloadAsync(
         Uri url,
         string? expectedSha256,
@@ -25,6 +32,8 @@ internal sealed class UpdateDownloader(HttpClient httpClient)
             throw new UpdateException(
                 $"Download failed: {(int)response.StatusCode} {response.ReasonPhrase} from {url}.");
 
+        long? total = response.Content.Headers.ContentLength;
+
         using IncrementalHash? hasher = expectedSha256 is { Length: > 0 }
             ? IncrementalHash.CreateHash(HashAlgorithmName.SHA256)
             : null;
@@ -40,12 +49,23 @@ internal sealed class UpdateDownloader(HttpClient httpClient)
             byte[] buffer = ArrayPool<byte>.Shared.Rent(BufferSize);
             try
             {
+                long received = 0;
+                long lastReported = 0;
                 int read;
                 while ((read = await input.ReadAsync(buffer.AsMemory(0, BufferSize), ct).ConfigureAwait(false)) > 0)
                 {
                     await output.WriteAsync(buffer.AsMemory(0, read), ct).ConfigureAwait(false);
                     hasher?.AppendData(buffer, 0, read);
+                    received += read;
+
+                    if (OnProgress is { } sink && received - lastReported >= 256 * 1024)
+                    {
+                        sink(received, total);
+                        lastReported = received;
+                    }
                 }
+
+                OnProgress?.Invoke(received, total);
             }
             finally
             {

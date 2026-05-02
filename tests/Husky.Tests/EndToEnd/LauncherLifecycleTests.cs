@@ -14,9 +14,9 @@ public sealed class LauncherLifecycleTests
         System.Diagnostics.Process launcher = staged.Start(onStandardOutput: stdoutLines.Enqueue);
 
         // After the handshake the launcher logs "<name> v<version> is up.".
-        // Spectre.Console may wrap long lines across multiple stdout lines on
-        // narrow virtual terminals — match each fragment independently.
-        await WaitForFragmentAsync(stdoutLines, "is up", TimeSpan.FromSeconds(30));
+        // ANSI status-word colouring breaks "is up" with escape sequences, so
+        // we match a stable fragment that the highlighter does not touch.
+        await WaitForFragmentAsync(stdoutLines, "smoke-app v1.0.0", TimeSpan.FromSeconds(30));
 
         Assert.Contains(stdoutLines, line =>
             line.Contains("starting smoke-app", StringComparison.Ordinal));

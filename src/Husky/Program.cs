@@ -41,6 +41,15 @@ catch (HuskyConfigException ex)
 }
 
 UpdateDownloader downloader = new(httpClient);
+long lastReportedMb = -1;
+downloader.OnProgress = (received, total) =>
+{
+    long mb = received / (1024 * 1024);
+    if (mb == lastReportedMb && total is not null && received < total) return;
+    lastReportedMb = mb;
+    string totalText = total is { } t ? $" / {HumanBytes.Format(t)}" : "";
+    ConsoleOutput.Husky($"fetching... {HumanBytes.Format(received)}{totalText}");
+};
 using UpdateFlow updateFlow = new(downloader, installDirectory, config.Executable);
 
 AppSessionLauncher sessionLauncher = new(

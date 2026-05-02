@@ -37,4 +37,25 @@ public sealed class ConsoleOutputTests
 
         Assert.EndsWith("[[red]]boom[[/]]", line, StringComparison.Ordinal);
     }
+
+    [Theory]
+    [InlineData("smoke-app v1.0.0 is up.", "[green]up[/]")]
+    [InlineData("status: healthy", "[green]healthy[/]")]
+    [InlineData("status: degraded", "[yellow]degraded[/]")]
+    [InlineData("status: unhealthy", "[red]unhealthy[/]")]
+    [InlineData("app didn't respond. growling.", "[yellow]growling[/]")]
+    public void BuildMarkup_highlights_status_words(string message, string expectedFragment)
+    {
+        string line = ConsoleOutput.BuildMarkup(FixedTime, "husky", "cyan", message);
+
+        Assert.Contains(expectedFragment, line, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildMarkup_does_not_highlight_status_words_inside_other_words()
+    {
+        string line = ConsoleOutput.BuildMarkup(FixedTime, "husky", "cyan", "shutdown-ack received");
+
+        Assert.DoesNotContain("[red]down[/]", line, StringComparison.Ordinal);
+    }
 }
