@@ -16,7 +16,7 @@ internal sealed class LauncherRuntime(
     private readonly object sessionGate = new();
     private AppSession? currentSession;
     private TaskCompletionSource<bool>? updateInFlight;
-    private readonly TaskCompletionSource declaredDeadTrigger = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private TaskCompletionSource declaredDeadTrigger = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public async Task<int> RunAsync(CancellationToken graceful, CancellationToken hardKill)
     {
@@ -109,7 +109,8 @@ internal sealed class LauncherRuntime(
             }
 
             Task gracefulWait = AwaitCancellationAsync(graceful);
-            Task deadWait = declaredDeadTrigger.Task;
+            Task deadWait;
+            lock (sessionGate) deadWait = declaredDeadTrigger.Task;
             Task winner = await Task.WhenAny(session.ExitTask, gracefulWait, deadWait).ConfigureAwait(false);
 
             if (winner == gracefulWait)
@@ -267,6 +268,11 @@ internal sealed class LauncherRuntime(
 
     private async Task<AppSession> StartSessionAsync(CancellationToken ct)
     {
+        // Reset the dead trigger so the supervisor only reacts to *this*
+        // session's watchdog escalation.
+        lock (sessionGate)
+            declaredDeadTrigger = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
         AppSession session = await sessionLauncher.StartAsync(OnSessionDeclaredDead, ct).ConfigureAwait(false);
         SetCurrentSession(session);
         return session;
@@ -298,7 +304,9 @@ internal sealed class LauncherRuntime(
     {
         ConsoleOutput.Husky("no answer. growling.");
         session.Kill();
-        declaredDeadTrigger.TrySetResult();
+        TaskCompletionSource trigger;
+        lock (sessionGate) trigger = declaredDeadTrigger;
+        trigger.TrySetResult();
     }
 
     private static void AnnounceUp(AppSession session) =>
