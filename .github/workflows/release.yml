@@ -1,0 +1,109 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to publish (e.g. v0.1.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: publish ${{ matrix.rid }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+            archive: zip
+          - os: ubuntu-latest
+            rid: linux-x64
+            archive: tar.gz
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore Husky.sln
+
+      - name: Build
+        run: dotnet build Husky.sln --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test Husky.sln --configuration Release --no-build
+
+      - name: Publish Husky launcher (${{ matrix.rid }})
+        shell: bash
+        run: |
+          dotnet publish src/Husky/Husky.csproj \
+            --configuration Release \
+            --runtime ${{ matrix.rid }} \
+            --output publish/${{ matrix.rid }} \
+            -p:IsPublishing=true
+
+      - name: Pack Husky.Client NuGet
+        if: matrix.rid == 'linux-x64'
+        run: dotnet pack src/Husky.Client/Husky.Client.csproj --configuration Release --output nupkg --no-build
+
+      - name: Archive launcher (zip)
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if (-not $tag -or $tag -eq "main") { $tag = "${{ inputs.tag }}" }
+          Compress-Archive -Path publish/${{ matrix.rid }}/* -DestinationPath "husky-$tag-${{ matrix.rid }}.zip"
+
+      - name: Archive launcher (tar.gz)
+        if: matrix.archive == 'tar.gz'
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME:-${{ inputs.tag }}}"
+          tar -czf "husky-${tag}-${{ matrix.rid }}.tar.gz" -C publish/${{ matrix.rid }} .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: husky-${{ matrix.rid }}
+          path: |
+            husky-*-${{ matrix.rid }}.zip
+            husky-*-${{ matrix.rid }}.tar.gz
+            nupkg/*.nupkg
+            nupkg/*.snupkg
+          if-no-files-found: ignore
+
+  github-release:
+    name: GitHub Release
+    needs: publish
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/**/husky-*.zip
+            artifacts/**/husky-*.tar.gz
+            artifacts/**/*.nupkg
+            artifacts/**/*.snupkg
+          generate_release_notes: true
+          fail_on_unmatched_files: false
