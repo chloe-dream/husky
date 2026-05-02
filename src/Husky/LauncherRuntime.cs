@@ -17,6 +17,7 @@ internal sealed class LauncherRuntime(
     private AppSession? currentSession;
     private TaskCompletionSource<bool>? updateInFlight;
     private TaskCompletionSource declaredDeadTrigger = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private TaskCompletionSource sessionStartedTrigger = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public async Task<int> RunAsync(CancellationToken graceful, CancellationToken hardKill)
     {
@@ -164,8 +165,11 @@ internal sealed class LauncherRuntime(
             if (!restartPolicy.CanRestart())
             {
                 ConsoleOutput.Husky("enough. lying down.");
-                await ParkUntilUpdateOrInterruptAsync(graceful).ConfigureAwait(false);
-                return ExitCodes.Ok;
+                bool revived = await ParkUntilUpdateOrInterruptAsync(graceful).ConfigureAwait(false);
+                if (!revived) return ExitCodes.Ok;
+
+                ConsoleOutput.Husky("update brought a fresh build — back online.");
+                continue;
             }
 
             ConsoleOutput.Husky($"pausing {config.RestartPauseSec}s before restart.");
@@ -189,10 +193,19 @@ internal sealed class LauncherRuntime(
         }
     }
 
-    private static async Task ParkUntilUpdateOrInterruptAsync(CancellationToken graceful)
+    /// <summary>
+    /// Wait for either a graceful interrupt or a successful update that brings
+    /// up a fresh session (LEASH §8.4: a successful update resets the cap and
+    /// triggers a start). Returns true when a session is now available.
+    /// </summary>
+    private async Task<bool> ParkUntilUpdateOrInterruptAsync(CancellationToken graceful)
     {
-        try { await AwaitCancellationAsync(graceful).ConfigureAwait(false); }
-        catch (OperationCanceledException) { }
+        Task gracefulWait = AwaitCancellationAsync(graceful);
+        Task sessionWait;
+        lock (sessionGate) sessionWait = sessionStartedTrigger.Task;
+
+        Task winner = await Task.WhenAny(gracefulWait, sessionWait).ConfigureAwait(false);
+        return winner == sessionWait && CurrentSession is not null;
     }
 
     private async Task PollOnceAsync(CancellationToken ct)
@@ -319,7 +332,14 @@ internal sealed class LauncherRuntime(
 
     private void SetCurrentSession(AppSession session)
     {
-        lock (sessionGate) currentSession = session;
+        TaskCompletionSource? previousTrigger;
+        lock (sessionGate)
+        {
+            currentSession = session;
+            previousTrigger = sessionStartedTrigger;
+            sessionStartedTrigger = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+        previousTrigger.TrySetResult();
     }
 
     private TaskCompletionSource<bool> StartUpdate()
