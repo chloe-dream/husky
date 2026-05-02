@@ -2,7 +2,40 @@
 
   <PropertyGroup>
     <IsPackable>true</IsPackable>
+
+    <PackageId>Husky.Client</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Chloe Bernette</Authors>
+    <Company>Chloe Bernette</Company>
+    <Description>Slim client library for apps hosted by the Husky launcher. Drop in three lines, get clean shutdown, health probes, and standalone-mode safety for free.</Description>
+    <PackageTags>husky;launcher;process;supervision;updates;hosted-service</PackageTags>
+    <PackageProjectUrl>https://github.com/Chloe3DX/husky</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Chloe3DX/husky</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+
+    <!-- Husky.Protocol is shipped as an implementation detail of this NuGet
+         (LEASH §13.2 "or shipped as a separate package — decide at actual
+         release time" — for v1 we ship it inside Husky.Client). -->
+    <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);IncludeReferencedProjectsInPackage</TargetsForTfmSpecificBuildOutput>
   </PropertyGroup>
+
+  <Target Name="IncludeReferencedProjectsInPackage">
+    <ItemGroup>
+      <BuildOutputInPackage Include="$(OutputPath)Husky.Protocol.dll" />
+    </ItemGroup>
+  </Target>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="Husky.Client.Tests" />
