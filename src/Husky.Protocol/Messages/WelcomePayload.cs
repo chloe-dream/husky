@@ -4,4 +4,5 @@ public sealed record WelcomePayload(
     int ProtocolVersion,
     string LauncherVersion,
     bool Accepted,
-    string? Reason);
+    string? Reason,
+    IReadOnlyList<string>? Capabilities = null);

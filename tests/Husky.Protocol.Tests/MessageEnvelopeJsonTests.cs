@@ -207,4 +207,180 @@ public sealed class MessageEnvelopeJsonTests
         Assert.NotNull(parsed);
         Assert.Equal("x", parsed!.AppName);
     }
+
+    [Fact]
+    public void Hello_with_capabilities_and_preferences_matches_spec_wire_shape()
+    {
+        // LEASH §3.5.1 — the canonical hello carrying capability tokens and
+        // an updateMode preference. Pin the exact wire shape so a refactor
+        // cannot silently rearrange or drop fields.
+        HelloPayload payload = new(
+            ProtocolVersion: 1,
+            AppVersion: "1.4.2",
+            AppName: "umbrella-bot",
+            Pid: 4218,
+            Capabilities: [Capabilities.ManualUpdates, Capabilities.ShutdownProgress],
+            Preferences: new HelloPreferences(UpdateMode: UpdateModes.Manual));
+
+        string json = JsonSerializer.Serialize(payload, HuskyJsonContext.Default.HelloPayload);
+
+        Assert.Equal(
+            """{"protocolVersion":1,"appVersion":"1.4.2","appName":"umbrella-bot","pid":4218,"capabilities":["manual-updates","shutdown-progress"],"preferences":{"updateMode":"manual"}}""",
+            json);
+    }
+
+    [Fact]
+    public void Hello_without_capabilities_or_preferences_omits_those_fields()
+    {
+        // Backward compat: a pre-update-protocol app sends only the original
+        // four fields; the wire output must still match the v1.0 baseline.
+        HelloPayload payload = new(
+            ProtocolVersion: 1,
+            AppVersion: "1.0.0",
+            AppName: "legacy-app",
+            Pid: 9999);
+
+        string json = JsonSerializer.Serialize(payload, HuskyJsonContext.Default.HelloPayload);
+
+        Assert.Equal(
+            """{"protocolVersion":1,"appVersion":"1.0.0","appName":"legacy-app","pid":9999}""",
+            json);
+    }
+
+    [Fact]
+    public void Hello_round_trips_capabilities_and_preferences()
+    {
+        HelloPayload original = new(
+            ProtocolVersion: 1,
+            AppVersion: "2.0.0",
+            AppName: "fishbowl",
+            Pid: 1234,
+            Capabilities: [Capabilities.ManualUpdates],
+            Preferences: new HelloPreferences(UpdateMode: UpdateModes.Manual));
+
+        string json = JsonSerializer.Serialize(original, HuskyJsonContext.Default.HelloPayload);
+        HelloPayload? parsed = JsonSerializer.Deserialize(json, HuskyJsonContext.Default.HelloPayload);
+
+        Assert.NotNull(parsed);
+        Assert.Equal(original.Capabilities, parsed!.Capabilities);
+        Assert.Equal(UpdateModes.Manual, parsed.Preferences?.UpdateMode);
+    }
+
+    [Fact]
+    public void Welcome_with_capabilities_includes_them_in_wire_shape()
+    {
+        WelcomePayload payload = new(
+            ProtocolVersion: 1,
+            LauncherVersion: "1.0.0",
+            Accepted: true,
+            Reason: null,
+            Capabilities: [Capabilities.ManualUpdates, Capabilities.ShutdownProgress]);
+
+        string json = JsonSerializer.Serialize(payload, HuskyJsonContext.Default.WelcomePayload);
+
+        Assert.Equal(
+            """{"protocolVersion":1,"launcherVersion":"1.0.0","accepted":true,"capabilities":["manual-updates","shutdown-progress"]}""",
+            json);
+    }
+
+    [Fact]
+    public void UpdateStatus_payload_round_trips_through_json()
+    {
+        UpdateStatusPayload original = new(
+            Available: true,
+            CurrentVersion: "1.4.2",
+            NewVersion: "1.4.3",
+            DownloadSizeBytes: 6918432);
+
+        string json = JsonSerializer.Serialize(original, HuskyJsonContext.Default.UpdateStatusPayload);
+        UpdateStatusPayload? parsed = JsonSerializer.Deserialize(json, HuskyJsonContext.Default.UpdateStatusPayload);
+
+        Assert.Equal(
+            """{"available":true,"currentVersion":"1.4.2","newVersion":"1.4.3","downloadSizeBytes":6918432}""",
+            json);
+        Assert.Equal(original, parsed);
+    }
+
+    [Fact]
+    public void UpdateStatus_with_no_update_omits_optional_fields()
+    {
+        UpdateStatusPayload original = new(
+            Available: false,
+            CurrentVersion: "1.4.2");
+
+        string json = JsonSerializer.Serialize(original, HuskyJsonContext.Default.UpdateStatusPayload);
+
+        Assert.Equal(
+            """{"available":false,"currentVersion":"1.4.2"}""",
+            json);
+    }
+
+    [Fact]
+    public void UpdateAvailable_payload_round_trips_through_json()
+    {
+        UpdateAvailablePayload original = new(
+            CurrentVersion: "1.4.2",
+            NewVersion: "1.4.3",
+            DownloadSizeBytes: 6918432);
+
+        string json = JsonSerializer.Serialize(original, HuskyJsonContext.Default.UpdateAvailablePayload);
+        UpdateAvailablePayload? parsed = JsonSerializer.Deserialize(json, HuskyJsonContext.Default.UpdateAvailablePayload);
+
+        Assert.Equal(
+            """{"currentVersion":"1.4.2","newVersion":"1.4.3","downloadSizeBytes":6918432}""",
+            json);
+        Assert.Equal(original, parsed);
+    }
+
+    [Fact]
+    public void UpdateCheck_envelope_carries_id_and_type_only()
+    {
+        // Mirrors ping (§3.5.4). No payload — purely a request marker.
+        MessageEnvelope envelope = new()
+        {
+            Id = "55555555-5555-5555-5555-555555555555",
+            Type = MessageTypes.UpdateCheck,
+        };
+
+        string json = JsonSerializer.Serialize(envelope, HuskyJsonContext.Default.MessageEnvelope);
+
+        Assert.Equal(
+            """{"id":"55555555-5555-5555-5555-555555555555","type":"update-check"}""",
+            json);
+    }
+
+    [Fact]
+    public void UpdateNow_envelope_has_only_a_type_field()
+    {
+        // Fire-and-forget trigger (§3.5.12). No id, no data.
+        MessageEnvelope envelope = new() { Type = MessageTypes.UpdateNow };
+
+        string json = JsonSerializer.Serialize(envelope, HuskyJsonContext.Default.MessageEnvelope);
+
+        Assert.Equal("""{"type":"update-now"}""", json);
+    }
+
+    [Fact]
+    public void SetUpdateMode_payload_round_trips_through_json()
+    {
+        SetUpdateModePayload original = new(Mode: UpdateModes.Manual);
+
+        string json = JsonSerializer.Serialize(original, HuskyJsonContext.Default.SetUpdateModePayload);
+        SetUpdateModePayload? parsed = JsonSerializer.Deserialize(json, HuskyJsonContext.Default.SetUpdateModePayload);
+
+        Assert.Equal("""{"mode":"manual"}""", json);
+        Assert.Equal(original, parsed);
+    }
+
+    [Fact]
+    public void UpdateModeAck_payload_round_trips_through_json()
+    {
+        UpdateModeAckPayload original = new(Mode: UpdateModes.Auto);
+
+        string json = JsonSerializer.Serialize(original, HuskyJsonContext.Default.UpdateModeAckPayload);
+        UpdateModeAckPayload? parsed = JsonSerializer.Deserialize(json, HuskyJsonContext.Default.UpdateModeAckPayload);
+
+        Assert.Equal("""{"mode":"auto"}""", json);
+        Assert.Equal(original, parsed);
+    }
 }
