@@ -82,7 +82,7 @@ See [`samples/`](./samples) for full templates.
 
 **Tell your users**: the user-side recipe is "download Husky, drop a six-line config next to it, run." Copy this into your project's README, swapping in your own repo + asset:
 
-> 1. Download the launcher binary for your OS from the [Husky releases page](https://github.com/Chloe3DX/husky/releases). Extract `Husky.exe` (Windows) or `Husky` (Linux).
+> 1. Download the launcher binary for your OS from the [Husky releases page](https://github.com/chloe-dream/husky/releases). Extract `Husky.exe` (Windows) or `Husky` (Linux).
 > 2. Save it in a folder of your choice. Next to it, create `husky.config.json`:
 >    ```json
 >    { "source": { "type": "github", "repo": "your-org/your-app" } }
@@ -95,7 +95,7 @@ Many app distributors ship a one-file installer that bundles Husky for you — i
 
 **Step-by-step:**
 
-1. Download the launcher binary for your OS from the [Husky releases page](https://github.com/Chloe3DX/husky/releases). Pick the trim build (`husky-vX.Y.Z-<rid>.zip` / `.tar.gz`); the `-aot` variant is a smaller native build with the same behaviour. Extract `Husky.exe` (Windows) or `Husky` (Linux).
+1. Download the launcher binary for your OS from the [Husky releases page](https://github.com/chloe-dream/husky/releases). Pick the trim build (`husky-vX.Y.Z-<rid>.zip` / `.tar.gz`); the `-aot` variant is a smaller native build with the same behaviour. Extract `Husky.exe` (Windows) or `Husky` (Linux).
 2. Make a folder somewhere portable — Desktop, USB stick, `~/apps/fishbowl/`, anywhere.
 3. Drop the launcher binary in.
 4. Save a `husky.config.json` next to it. The minimum (Husky will pick the first `.zip` asset on the latest release):

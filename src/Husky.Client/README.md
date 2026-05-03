@@ -1,6 +1,6 @@
 # Husky.Client
 
-Slim client library for apps hosted by [Husky](https://github.com/Chloe3DX/husky), the generic .NET app launcher.
+Slim client library for apps hosted by [Husky](https://github.com/chloe-dream/husky), the generic .NET app launcher.
 
 ## Quick start — auto updates (the default)
 
