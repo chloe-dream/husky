@@ -28,12 +28,27 @@ internal sealed class AppPipeServer : IAsyncDisposable
     public ConnectedApp? ConnectedApp { get; private set; }
 
     /// <summary>
+    /// Cached snapshot of the latest known update for this session — populated
+    /// by the launcher's polling loop. <c>update-check</c> replies, and
+    /// <c>update-now</c> triggers, are answered against this. Null means "no
+    /// known update."
+    /// </summary>
+    public UpdateStatusPayload? CurrentUpdateStatus { get; private set; }
+
+    /// <summary>
     /// Fires once for every message received from the hosted app — heartbeat,
     /// pong, shutdown-ack, or unknown — *before* type-specific dispatch. The
     /// watchdog uses this to refresh its <c>lastActivity</c> timestamp per
     /// LEASH §8.1.
     /// </summary>
     public Action? OnActivity { get; set; }
+
+    /// <summary>
+    /// Fires when the hosted app sends <c>update-now</c>. The launcher is
+    /// expected to inspect <see cref="CurrentUpdateStatus"/> and start the
+    /// update flow if an update is cached, or log a warning if not.
+    /// </summary>
+    public Action? OnUpdateNowRequested { get; set; }
 
     internal Task? ReceiverTask => receiverLoop;
 
@@ -165,6 +180,27 @@ internal sealed class AppPipeServer : IAsyncDisposable
         }
     }
 
+    public void SetCurrentUpdateStatus(UpdateStatusPayload? status)
+    {
+        CurrentUpdateStatus = status;
+    }
+
+    public async Task PushUpdateAvailableAsync(UpdateAvailablePayload payload, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(payload);
+        if (receiverLoop is null)
+            throw new InvalidOperationException("Cannot push update-available before the handshake completes.");
+
+        JsonElement data = JsonSerializer.SerializeToElement(payload, HuskyJsonContext.Default.UpdateAvailablePayload);
+        MessageEnvelope envelope = new()
+        {
+            Type = MessageTypes.UpdateAvailable,
+            Data = data,
+        };
+
+        await WriteAsync(envelope, ct).ConfigureAwait(false);
+    }
+
     public async Task SendShutdownAsync(
         string reason,
         TimeSpan totalTimeout,
@@ -259,11 +295,71 @@ internal sealed class AppPipeServer : IAsyncDisposable
                         pongTcs.TrySetResult();
                         break;
 
+                    case MessageTypes.UpdateCheck:
+                        await HandleUpdateCheckAsync(envelope, ct).ConfigureAwait(false);
+                        break;
+
+                    case MessageTypes.UpdateNow:
+                        OnUpdateNowRequested?.Invoke();
+                        break;
+
+                    case MessageTypes.SetUpdateMode:
+                        await HandleSetUpdateModeAsync(envelope, ct).ConfigureAwait(false);
+                        break;
+
                     // heartbeat / unknown types: drop per §3.6.
                 }
             }
         }
         catch (OperationCanceledException) { /* normal */ }
+    }
+
+    private async Task HandleUpdateCheckAsync(MessageEnvelope request, CancellationToken ct)
+    {
+        UpdateStatusPayload reply = CurrentUpdateStatus
+            ?? new UpdateStatusPayload(Available: false, CurrentVersion: ConnectedApp?.Version ?? "0.0.0");
+
+        JsonElement data = JsonSerializer.SerializeToElement(reply, HuskyJsonContext.Default.UpdateStatusPayload);
+        MessageEnvelope envelope = new()
+        {
+            Id = Guid.NewGuid().ToString("D"),
+            ReplyTo = request.Id,
+            Type = MessageTypes.UpdateStatus,
+            Data = data,
+        };
+
+        await WriteAsync(envelope, ct).ConfigureAwait(false);
+    }
+
+    private async Task HandleSetUpdateModeAsync(MessageEnvelope request, CancellationToken ct)
+    {
+        SetUpdateModePayload? payload = request.Data?.Deserialize(HuskyJsonContext.Default.SetUpdateModePayload);
+        string requested = payload?.Mode ?? UpdateModes.Auto;
+
+        // Capability gate (§3.5.13): if the app didn't declare manual-updates,
+        // any non-default request is silently downgraded to auto and the ack
+        // echoes auto so the app sees the no-op.
+        bool supportsManual = ConnectedApp?.SupportsManualUpdates == true;
+        string accepted = (requested == UpdateModes.Manual && supportsManual)
+            ? UpdateModes.Manual
+            : UpdateModes.Auto;
+
+        if (ConnectedApp is not null)
+        {
+            ConnectedApp = ConnectedApp with { UpdateMode = accepted };
+        }
+
+        UpdateModeAckPayload ack = new(Mode: accepted);
+        JsonElement data = JsonSerializer.SerializeToElement(ack, HuskyJsonContext.Default.UpdateModeAckPayload);
+        MessageEnvelope envelope = new()
+        {
+            Id = Guid.NewGuid().ToString("D"),
+            ReplyTo = request.Id,
+            Type = MessageTypes.UpdateModeAck,
+            Data = data,
+        };
+
+        await WriteAsync(envelope, ct).ConfigureAwait(false);
     }
 
     private static NamedPipeServerStream CreatePipe(string pipeName)

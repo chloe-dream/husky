@@ -126,6 +126,169 @@ public sealed class AppPipeServerTests
     }
 
     [Fact]
+    public async Task UpdateCheck_replies_with_cached_status_when_update_is_known()
+    {
+        await using LauncherPipeHarness h = await LauncherPipeHarness.CreateConnectedAsync();
+
+        Task accept = h.Server.AcceptAndHandshakeAsync(TimeSpan.FromSeconds(5));
+        await SendHelloAsync(h.ClientWriter, "test-app", "1.0.0", 1,
+            capabilities: [Capabilities.ManualUpdates]);
+        await ReadAsync(h.ClientReader); // welcome
+        await accept;
+
+        h.Server.SetCurrentUpdateStatus(new UpdateStatusPayload(
+            Available: true,
+            CurrentVersion: "1.0.0",
+            NewVersion: "2.0.0",
+            DownloadSizeBytes: 12345));
+
+        string requestId = Guid.NewGuid().ToString("D");
+        await h.ClientWriter.WriteAsync(new MessageEnvelope
+        {
+            Id = requestId,
+            Type = MessageTypes.UpdateCheck,
+        });
+
+        MessageEnvelope reply = await ReadAsync(h.ClientReader);
+        Assert.Equal(MessageTypes.UpdateStatus, reply.Type);
+        Assert.Equal(requestId, reply.ReplyTo);
+
+        UpdateStatusPayload? payload = reply.Data?.Deserialize(HuskyJsonContext.Default.UpdateStatusPayload);
+        Assert.NotNull(payload);
+        Assert.True(payload!.Available);
+        Assert.Equal("2.0.0", payload.NewVersion);
+        Assert.Equal(12345L, payload.DownloadSizeBytes);
+    }
+
+    [Fact]
+    public async Task UpdateCheck_replies_with_no_update_when_cache_is_empty()
+    {
+        await using LauncherPipeHarness h = await LauncherPipeHarness.CreateConnectedAsync();
+
+        Task accept = h.Server.AcceptAndHandshakeAsync(TimeSpan.FromSeconds(5));
+        await SendHelloAsync(h.ClientWriter, "test-app", "1.4.2", 1,
+            capabilities: [Capabilities.ManualUpdates]);
+        await ReadAsync(h.ClientReader); // welcome
+        await accept;
+
+        await h.ClientWriter.WriteAsync(new MessageEnvelope
+        {
+            Id = Guid.NewGuid().ToString("D"),
+            Type = MessageTypes.UpdateCheck,
+        });
+
+        MessageEnvelope reply = await ReadAsync(h.ClientReader);
+        UpdateStatusPayload? payload = reply.Data?.Deserialize(HuskyJsonContext.Default.UpdateStatusPayload);
+
+        Assert.False(payload!.Available);
+        Assert.Equal("1.4.2", payload.CurrentVersion);
+    }
+
+    [Fact]
+    public async Task UpdateNow_message_invokes_OnUpdateNowRequested()
+    {
+        await using LauncherPipeHarness h = await LauncherPipeHarness.CreateConnectedAsync();
+
+        TaskCompletionSource triggered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        h.Server.OnUpdateNowRequested = () => triggered.TrySetResult();
+
+        Task accept = h.Server.AcceptAndHandshakeAsync(TimeSpan.FromSeconds(5));
+        await SendHelloAsync(h.ClientWriter, "test-app", "1.0.0", 1,
+            capabilities: [Capabilities.ManualUpdates]);
+        await ReadAsync(h.ClientReader); // welcome
+        await accept;
+
+        await h.ClientWriter.WriteAsync(new MessageEnvelope { Type = MessageTypes.UpdateNow });
+
+        await triggered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+    }
+
+    [Fact]
+    public async Task SetUpdateMode_acks_and_updates_mode_when_capability_present()
+    {
+        await using LauncherPipeHarness h = await LauncherPipeHarness.CreateConnectedAsync();
+
+        Task accept = h.Server.AcceptAndHandshakeAsync(TimeSpan.FromSeconds(5));
+        await SendHelloAsync(h.ClientWriter, "test-app", "1.0.0", 1,
+            capabilities: [Capabilities.ManualUpdates]);
+        await ReadAsync(h.ClientReader); // welcome
+        await accept;
+
+        Assert.Equal(UpdateModes.Auto, h.Server.ConnectedApp!.UpdateMode);
+
+        SetUpdateModePayload payload = new(Mode: UpdateModes.Manual);
+        JsonElement data = JsonSerializer.SerializeToElement(payload, HuskyJsonContext.Default.SetUpdateModePayload);
+        string requestId = Guid.NewGuid().ToString("D");
+        await h.ClientWriter.WriteAsync(new MessageEnvelope
+        {
+            Id = requestId,
+            Type = MessageTypes.SetUpdateMode,
+            Data = data,
+        });
+
+        MessageEnvelope ack = await ReadAsync(h.ClientReader);
+        Assert.Equal(MessageTypes.UpdateModeAck, ack.Type);
+        Assert.Equal(requestId, ack.ReplyTo);
+
+        UpdateModeAckPayload? ackPayload = ack.Data?.Deserialize(HuskyJsonContext.Default.UpdateModeAckPayload);
+        Assert.Equal(UpdateModes.Manual, ackPayload!.Mode);
+        Assert.Equal(UpdateModes.Manual, h.Server.ConnectedApp!.UpdateMode);
+    }
+
+    [Fact]
+    public async Task SetUpdateMode_downgrades_manual_to_auto_when_capability_missing()
+    {
+        await using LauncherPipeHarness h = await LauncherPipeHarness.CreateConnectedAsync();
+
+        Task accept = h.Server.AcceptAndHandshakeAsync(TimeSpan.FromSeconds(5));
+        await SendHelloAsync(h.ClientWriter, "test-app", "1.0.0", 1, capabilities: []);
+        await ReadAsync(h.ClientReader); // welcome
+        await accept;
+
+        SetUpdateModePayload payload = new(Mode: UpdateModes.Manual);
+        JsonElement data = JsonSerializer.SerializeToElement(payload, HuskyJsonContext.Default.SetUpdateModePayload);
+        await h.ClientWriter.WriteAsync(new MessageEnvelope
+        {
+            Id = Guid.NewGuid().ToString("D"),
+            Type = MessageTypes.SetUpdateMode,
+            Data = data,
+        });
+
+        MessageEnvelope ack = await ReadAsync(h.ClientReader);
+        UpdateModeAckPayload? ackPayload = ack.Data?.Deserialize(HuskyJsonContext.Default.UpdateModeAckPayload);
+
+        Assert.Equal(UpdateModes.Auto, ackPayload!.Mode);
+        Assert.Equal(UpdateModes.Auto, h.Server.ConnectedApp!.UpdateMode);
+    }
+
+    [Fact]
+    public async Task PushUpdateAvailableAsync_sends_unsolicited_message()
+    {
+        await using LauncherPipeHarness h = await LauncherPipeHarness.CreateConnectedAsync();
+
+        Task accept = h.Server.AcceptAndHandshakeAsync(TimeSpan.FromSeconds(5));
+        await SendHelloAsync(h.ClientWriter, "test-app", "1.0.0", 1,
+            capabilities: [Capabilities.ManualUpdates]);
+        await ReadAsync(h.ClientReader); // welcome
+        await accept;
+
+        UpdateAvailablePayload payload = new(
+            CurrentVersion: "1.0.0",
+            NewVersion: "1.1.0",
+            DownloadSizeBytes: 999);
+
+        await h.Server.PushUpdateAvailableAsync(payload, CancellationToken.None);
+
+        MessageEnvelope received = await ReadAsync(h.ClientReader);
+        Assert.Equal(MessageTypes.UpdateAvailable, received.Type);
+        Assert.Null(received.Id);
+        Assert.Null(received.ReplyTo);
+
+        UpdateAvailablePayload? parsed = received.Data?.Deserialize(HuskyJsonContext.Default.UpdateAvailablePayload);
+        Assert.Equal("1.1.0", parsed!.NewVersion);
+    }
+
+    [Fact]
     public async Task Welcome_replyTo_matches_hello_id()
     {
         await using LauncherPipeHarness h = await LauncherPipeHarness.CreateConnectedAsync();
