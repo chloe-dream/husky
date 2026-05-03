@@ -1,0 +1,10 @@
+{
+  "name": "fishbowl",
+  "executable": "app/Fishbowl.exe",
+
+  "checkMinutes": 30,
+  "shutdownTimeoutSec": 60,
+  "killAfterSec": 10,
+  "restartAttempts": 3,
+  "restartPauseSec": 30
+}
