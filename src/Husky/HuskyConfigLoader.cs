@@ -6,7 +6,7 @@ internal static class HuskyConfigLoader
 {
     public const string DefaultFileName = "husky.config.json";
 
-    public static HuskyConfig Load(string path)
+    public static LocalHuskyConfig Load(string path)
     {
         if (!File.Exists(path))
             throw new HuskyConfigException($"Config file not found: '{path}'.");
@@ -24,12 +24,12 @@ internal static class HuskyConfigLoader
         return Parse(content);
     }
 
-    internal static HuskyConfig Parse(string json)
+    internal static LocalHuskyConfig Parse(string json)
     {
-        HuskyConfig? config;
+        LocalHuskyConfig? config;
         try
         {
-            config = JsonSerializer.Deserialize(json, HuskyConfigJsonContext.Default.HuskyConfig);
+            config = JsonSerializer.Deserialize(json, HuskyConfigJsonContext.Default.LocalHuskyConfig);
         }
         catch (JsonException ex)
         {
@@ -43,38 +43,12 @@ internal static class HuskyConfigLoader
         return config;
     }
 
-    private static void Validate(HuskyConfig config)
+    private static void Validate(LocalHuskyConfig config)
     {
-        if (string.IsNullOrWhiteSpace(config.Name))
-            throw new HuskyConfigException("Config field 'name' is required.");
-
-        if (string.IsNullOrWhiteSpace(config.Executable))
-            throw new HuskyConfigException("Config field 'executable' is required.");
-
         if (config.Source is null)
             throw new HuskyConfigException("Config field 'source' is required.");
 
         ValidateSource(config.Source);
-
-        if (config.CheckMinutes < HuskyConfig.MinimumCheckMinutes)
-            throw new HuskyConfigException(
-                $"Config field 'checkMinutes' must be at least {HuskyConfig.MinimumCheckMinutes}; got {config.CheckMinutes}.");
-
-        if (config.ShutdownTimeoutSec <= 0)
-            throw new HuskyConfigException(
-                $"Config field 'shutdownTimeoutSec' must be positive; got {config.ShutdownTimeoutSec}.");
-
-        if (config.KillAfterSec < 0)
-            throw new HuskyConfigException(
-                $"Config field 'killAfterSec' must be non-negative; got {config.KillAfterSec}.");
-
-        if (config.RestartAttempts < 0)
-            throw new HuskyConfigException(
-                $"Config field 'restartAttempts' must be non-negative; got {config.RestartAttempts}.");
-
-        if (config.RestartPauseSec < 0)
-            throw new HuskyConfigException(
-                $"Config field 'restartPauseSec' must be non-negative; got {config.RestartPauseSec}.");
     }
 
     private static void ValidateSource(SourceConfig source)

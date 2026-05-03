@@ -28,9 +28,11 @@ public sealed class HuskyConfigLoaderTests
         """;
 
     [Fact]
-    public void Parse_returns_config_with_all_defaults_applied_when_optional_fields_are_omitted()
+    public void Parse_returns_a_local_config_with_optional_fields_left_null()
     {
-        HuskyConfig config = HuskyConfigLoader.Parse(ValidGitHubJson);
+        // Defaults are no longer applied at parse time; HuskyConfigResolver
+        // handles that step (LEASH §5.2). Loader's job is JSON + source.
+        LocalHuskyConfig config = HuskyConfigLoader.Parse(ValidGitHubJson);
 
         Assert.Equal("umbrella-bot", config.Name);
         Assert.Equal("app/UmbrellaBot.exe", config.Executable);
@@ -38,20 +40,18 @@ public sealed class HuskyConfigLoaderTests
         Assert.Equal("chloe/umbrella-bot", config.Source.Repo);
         Assert.Equal("UmbrellaBot-{version}.zip", config.Source.Asset);
         Assert.False(config.Source.AllowPreRelease);
-        Assert.Equal(HuskyConfig.DefaultCheckMinutes, config.CheckMinutes);
-        Assert.Equal(HuskyConfig.DefaultShutdownTimeoutSec, config.ShutdownTimeoutSec);
-        Assert.Equal(HuskyConfig.DefaultKillAfterSec, config.KillAfterSec);
-        Assert.Equal(HuskyConfig.DefaultRestartAttempts, config.RestartAttempts);
-        Assert.Equal(HuskyConfig.DefaultRestartPauseSec, config.RestartPauseSec);
+        Assert.Null(config.CheckMinutes);
+        Assert.Null(config.ShutdownTimeoutSec);
+        Assert.Null(config.KillAfterSec);
+        Assert.Null(config.RestartAttempts);
+        Assert.Null(config.RestartPauseSec);
     }
 
     [Fact]
-    public void Parse_overrides_defaults_when_optional_fields_are_set()
+    public void Parse_carries_optional_overrides_through_to_the_local_config()
     {
         const string json = """
             {
-              "name": "umbrella-bot",
-              "executable": "app/UmbrellaBot.exe",
               "source": { "type": "github", "repo": "x/y", "asset": "y-{version}.zip" },
               "checkMinutes": 30,
               "shutdownTimeoutSec": 90,
@@ -61,7 +61,7 @@ public sealed class HuskyConfigLoaderTests
             }
             """;
 
-        HuskyConfig config = HuskyConfigLoader.Parse(json);
+        LocalHuskyConfig config = HuskyConfigLoader.Parse(json);
 
         Assert.Equal(30, config.CheckMinutes);
         Assert.Equal(90, config.ShutdownTimeoutSec);
@@ -71,9 +71,25 @@ public sealed class HuskyConfigLoaderTests
     }
 
     [Fact]
+    public void Parse_accepts_a_minimal_local_config_with_only_source()
+    {
+        // LEASH §5.2: name and executable can come from source-supplied
+        // config, so the local file may legitimately omit them.
+        const string json = """
+            { "source": { "type": "github", "repo": "x/y", "asset": "y-{version}.zip" } }
+            """;
+
+        LocalHuskyConfig config = HuskyConfigLoader.Parse(json);
+
+        Assert.Null(config.Name);
+        Assert.Null(config.Executable);
+        Assert.Equal("x/y", config.Source.Repo);
+    }
+
+    [Fact]
     public void Parse_accepts_valid_http_source()
     {
-        HuskyConfig config = HuskyConfigLoader.Parse(ValidHttpJson);
+        LocalHuskyConfig config = HuskyConfigLoader.Parse(ValidHttpJson);
 
         Assert.Equal(SourceConfig.HttpType, config.Source.Type);
         Assert.Equal("https://example.invalid/manifest.json", config.Source.Manifest);
@@ -82,10 +98,8 @@ public sealed class HuskyConfigLoaderTests
     [Fact]
     public void Parse_reads_allow_pre_release_when_set()
     {
-        string json = """
+        const string json = """
             {
-              "name": "x",
-              "executable": "app/x.exe",
               "source": {
                 "type": "github",
                 "repo": "x/y",
@@ -95,29 +109,14 @@ public sealed class HuskyConfigLoaderTests
             }
             """;
 
-        HuskyConfig config = HuskyConfigLoader.Parse(json);
+        LocalHuskyConfig config = HuskyConfigLoader.Parse(json);
         Assert.True(config.Source.AllowPreRelease);
-    }
-
-    [Theory]
-    [InlineData("name")]
-    [InlineData("executable")]
-    public void Parse_throws_when_required_top_level_field_is_missing(string fieldToOmit)
-    {
-        string json = ValidGitHubJson.Replace($"\"{fieldToOmit}\":", $"\"_skip_{fieldToOmit}\":");
-
-        HuskyConfigException ex = Assert.Throws<HuskyConfigException>(
-            () => HuskyConfigLoader.Parse(json));
-
-        Assert.Contains(fieldToOmit, ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
     public void Parse_throws_when_source_is_missing()
     {
-        const string json = """
-            { "name": "umbrella-bot", "executable": "app/UmbrellaBot.exe" }
-            """;
+        const string json = """{ "name": "umbrella-bot", "executable": "app/UmbrellaBot.exe" }""";
 
         HuskyConfigException ex = Assert.Throws<HuskyConfigException>(
             () => HuskyConfigLoader.Parse(json));
@@ -129,11 +128,7 @@ public sealed class HuskyConfigLoaderTests
     public void Parse_throws_when_source_type_is_unknown()
     {
         const string json = """
-            {
-              "name": "umbrella-bot",
-              "executable": "app/UmbrellaBot.exe",
-              "source": { "type": "ftp", "repo": "x/y", "asset": "z" }
-            }
+            { "source": { "type": "ftp", "repo": "x/y", "asset": "z" } }
             """;
 
         HuskyConfigException ex = Assert.Throws<HuskyConfigException>(
@@ -146,11 +141,7 @@ public sealed class HuskyConfigLoaderTests
     public void Parse_throws_when_github_source_lacks_repo()
     {
         const string json = """
-            {
-              "name": "umbrella-bot",
-              "executable": "app/UmbrellaBot.exe",
-              "source": { "type": "github", "asset": "z-{version}.zip" }
-            }
+            { "source": { "type": "github", "asset": "z-{version}.zip" } }
             """;
 
         HuskyConfigException ex = Assert.Throws<HuskyConfigException>(
@@ -162,13 +153,7 @@ public sealed class HuskyConfigLoaderTests
     [Fact]
     public void Parse_throws_when_github_source_lacks_asset()
     {
-        const string json = """
-            {
-              "name": "umbrella-bot",
-              "executable": "app/UmbrellaBot.exe",
-              "source": { "type": "github", "repo": "x/y" }
-            }
-            """;
+        const string json = """{ "source": { "type": "github", "repo": "x/y" } }""";
 
         HuskyConfigException ex = Assert.Throws<HuskyConfigException>(
             () => HuskyConfigLoader.Parse(json));
@@ -179,13 +164,7 @@ public sealed class HuskyConfigLoaderTests
     [Fact]
     public void Parse_throws_when_http_source_lacks_manifest()
     {
-        const string json = """
-            {
-              "name": "umbrella-bot",
-              "executable": "app/UmbrellaBot.exe",
-              "source": { "type": "http" }
-            }
-            """;
+        const string json = """{ "source": { "type": "http" } }""";
 
         HuskyConfigException ex = Assert.Throws<HuskyConfigException>(
             () => HuskyConfigLoader.Parse(json));
@@ -197,59 +176,13 @@ public sealed class HuskyConfigLoaderTests
     public void Parse_throws_when_http_manifest_is_not_absolute_http_url()
     {
         const string json = """
-            {
-              "name": "umbrella-bot",
-              "executable": "app/UmbrellaBot.exe",
-              "source": { "type": "http", "manifest": "not-a-url" }
-            }
+            { "source": { "type": "http", "manifest": "not-a-url" } }
             """;
 
         HuskyConfigException ex = Assert.Throws<HuskyConfigException>(
             () => HuskyConfigLoader.Parse(json));
 
         Assert.Contains("manifest", ex.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Parse_throws_when_checkMinutes_is_below_minimum()
-    {
-        const string json = """
-            {
-              "name": "umbrella-bot",
-              "executable": "app/UmbrellaBot.exe",
-              "source": { "type": "github", "repo": "x/y", "asset": "z-{version}.zip" },
-              "checkMinutes": 1
-            }
-            """;
-
-        HuskyConfigException ex = Assert.Throws<HuskyConfigException>(
-            () => HuskyConfigLoader.Parse(json));
-
-        Assert.Contains("checkMinutes", ex.Message, StringComparison.Ordinal);
-        Assert.Contains(HuskyConfig.MinimumCheckMinutes.ToString(), ex.Message, StringComparison.Ordinal);
-    }
-
-    [Theory]
-    [InlineData("shutdownTimeoutSec", 0)]
-    [InlineData("shutdownTimeoutSec", -5)]
-    [InlineData("killAfterSec", -1)]
-    [InlineData("restartAttempts", -1)]
-    [InlineData("restartPauseSec", -1)]
-    public void Parse_throws_when_numeric_field_is_out_of_range(string field, int value)
-    {
-        string json = $$"""
-            {
-              "name": "umbrella-bot",
-              "executable": "app/UmbrellaBot.exe",
-              "source": { "type": "github", "repo": "x/y", "asset": "z-{version}.zip" },
-              "{{field}}": {{value}}
-            }
-            """;
-
-        HuskyConfigException ex = Assert.Throws<HuskyConfigException>(
-            () => HuskyConfigLoader.Parse(json));
-
-        Assert.Contains(field, ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -289,7 +222,7 @@ public sealed class HuskyConfigLoaderTests
         File.WriteAllText(path, ValidGitHubJson);
         try
         {
-            HuskyConfig config = HuskyConfigLoader.Load(path);
+            LocalHuskyConfig config = HuskyConfigLoader.Load(path);
 
             Assert.Equal("umbrella-bot", config.Name);
         }
@@ -315,7 +248,7 @@ public sealed class HuskyConfigLoaderTests
             }
             """;
 
-        HuskyConfig config = HuskyConfigLoader.Parse(json);
+        LocalHuskyConfig config = HuskyConfigLoader.Parse(json);
 
         Assert.Equal("umbrella-bot", config.Name);
     }

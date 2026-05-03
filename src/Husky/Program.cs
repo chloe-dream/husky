@@ -13,32 +13,103 @@ string configPath = Path.Combine(launcherDir, HuskyConfigLoader.DefaultFileName)
 string launcherVersion = GetLauncherVersion();
 Banner.Render(launcherVersion);
 
-HuskyConfig config;
+// Step 1 — load the local config. Only `source` is required at this point;
+// `name` and `executable` may come from source-supplied config (LEASH §5.2).
+LocalHuskyConfig localConfig;
 try
 {
-    config = HuskyConfigLoader.Load(configPath);
+    localConfig = HuskyConfigLoader.Load(configPath);
 }
 catch (HuskyConfigException ex)
 {
     ConsoleOutput.Husky($"config error: {ex.Message}");
+    return ExitCodes.ConfigError;
+}
+
+using HttpClient httpClient = BuildHttpClient(launcherVersion);
+
+// Step 2 — initialise the source provider.
+IUpdateSource source;
+try
+{
+    source = UpdateSourceFactory.Create(localConfig.Source, httpClient, launcherVersion);
+}
+catch (HuskyConfigException ex)
+{
+    ConsoleOutput.Husky($"config error: {ex.Message}");
+    return ExitCodes.ConfigError;
+}
+
+int sigintCount = 0;
+using CancellationTokenSource gracefulTrigger = new();
+using CancellationTokenSource hardKillTrigger = new();
+
+void OnInterrupt()
+{
+    int n = Interlocked.Increment(ref sigintCount);
+    try
+    {
+        if (n == 1) gracefulTrigger.Cancel();
+        else hardKillTrigger.Cancel();
+    }
+    catch (ObjectDisposedException) { /* shutting down */ }
+}
+
+ConsoleCancelEventHandler ctrlCHandler = (_, args) =>
+{
+    args.Cancel = true;
+    OnInterrupt();
+};
+Console.CancelKeyPress += ctrlCHandler;
+
+using PosixSignalRegistration sigtermReg = PosixSignalRegistration.Create(
+    PosixSignal.SIGTERM,
+    ctx =>
+    {
+        ctx.Cancel = true;
+        OnInterrupt();
+    });
+
+// Step 3 — initial source poll. Currentversion "0.0.0" makes the providers
+// always return the latest available release (so we get the source-supplied
+// config block whether or not we'd update). A network failure here is OK if
+// the local config can stand on its own.
+ConsoleOutput.Husky("sniffing for updates...");
+UpdateInfo? bootPoll = null;
+try
+{
+    bootPoll = await source.CheckForUpdateAsync("0.0.0", gracefulTrigger.Token).ConfigureAwait(false);
+    if (bootPoll?.SourceFieldDropped == true)
+    {
+        ConsoleOutput.Husky(
+            "source-supplied config contained a 'source' block — dropped (anti-redirect, LEASH §9.2).");
+    }
+}
+catch (OperationCanceledException) when (gracefulTrigger.IsCancellationRequested)
+{
+    return ExitCodes.Ok;
+}
+catch (Exception ex)
+{
+    ConsoleOutput.Husky($"initial source poll failed: {ex.Message}");
+}
+
+// Step 4 — resolve the effective config (local + source-supplied + defaults).
+HuskyConfig config;
+try
+{
+    config = HuskyConfigResolver.Resolve(localConfig, bootPoll?.Config);
+}
+catch (HuskyConfigException ex)
+{
+    ConsoleOutput.Husky(bootPoll is null
+        ? $"config incomplete and source unreachable: {ex.Message}"
+        : $"config error: {ex.Message}");
     return ExitCodes.ConfigError;
 }
 
 string executablePath = Path.GetFullPath(Path.Combine(launcherDir, config.Executable));
 string installDirectory = launcherDir;
-
-using HttpClient httpClient = BuildHttpClient(launcherVersion);
-
-IUpdateSource source;
-try
-{
-    source = UpdateSourceFactory.Create(config.Source, httpClient, launcherVersion);
-}
-catch (HuskyConfigException ex)
-{
-    ConsoleOutput.Husky($"config error: {ex.Message}");
-    return ExitCodes.ConfigError;
-}
 
 UpdateDownloader downloader = new(httpClient);
 long lastReportedMb = -1;
@@ -70,37 +141,8 @@ LauncherRuntime runtime = new(
     updateFlow: updateFlow,
     sessionLauncher: sessionLauncher,
     restartPolicy: restartPolicy,
-    executablePath: executablePath);
-
-int sigintCount = 0;
-using CancellationTokenSource gracefulTrigger = new();
-using CancellationTokenSource hardKillTrigger = new();
-
-void OnInterrupt()
-{
-    int n = Interlocked.Increment(ref sigintCount);
-    try
-    {
-        if (n == 1) gracefulTrigger.Cancel();
-        else hardKillTrigger.Cancel();
-    }
-    catch (ObjectDisposedException) { /* shutting down */ }
-}
-
-ConsoleCancelEventHandler ctrlCHandler = (_, args) =>
-{
-    args.Cancel = true;
-    OnInterrupt();
-};
-Console.CancelKeyPress += ctrlCHandler;
-
-using PosixSignalRegistration sigtermReg = PosixSignalRegistration.Create(
-    PosixSignal.SIGTERM,
-    ctx =>
-    {
-        ctx.Cancel = true;
-        OnInterrupt();
-    });
+    executablePath: executablePath,
+    seedUpdateInfo: bootPoll);
 
 try
 {

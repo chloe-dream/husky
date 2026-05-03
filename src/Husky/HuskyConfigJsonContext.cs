@@ -9,6 +9,6 @@ namespace Husky;
     WriteIndented = false,
     AllowTrailingCommas = true,
     ReadCommentHandling = JsonCommentHandling.Skip)]
-[JsonSerializable(typeof(HuskyConfig))]
+[JsonSerializable(typeof(LocalHuskyConfig))]
 [JsonSerializable(typeof(SourceConfig))]
 internal sealed partial class HuskyConfigJsonContext : JsonSerializerContext;

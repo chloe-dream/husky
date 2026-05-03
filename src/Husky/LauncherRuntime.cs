@@ -11,7 +11,8 @@ internal sealed class LauncherRuntime(
     UpdateFlow updateFlow,
     AppSessionLauncher sessionLauncher,
     RestartPolicy restartPolicy,
-    string executablePath)
+    string executablePath,
+    UpdateInfo? seedUpdateInfo = null)
 {
     private readonly object sessionGate = new();
     private AppSession? currentSession;
@@ -21,17 +22,25 @@ internal sealed class LauncherRuntime(
 
     public async Task<int> RunAsync(CancellationToken graceful, CancellationToken hardKill)
     {
-        // Boot-time update check (LEASH §5.3.5).
+        // Boot-time update check (LEASH §5.3). The seed comes from a pre-poll
+        // performed during config resolution (Program.cs); using it here saves
+        // a second HTTP round-trip and lets us decide bootstrap-vs-update
+        // against the actual installed version.
         bool installed = File.Exists(executablePath);
         string currentVersion = AppVersionReader.ReadCurrent(executablePath);
 
         if (!installed)
         {
             ConsoleOutput.Husky("no app installed yet — bootstrapping.");
+            if (seedUpdateInfo is null)
+            {
+                ConsoleOutput.Husky("bootstrap failed: source had no version available.");
+                return ExitCodes.ConfigError;
+            }
             string installedVersion;
             try
             {
-                installedVersion = await BootstrapAsync(currentVersion, graceful).ConfigureAwait(false);
+                installedVersion = await BootstrapAsync(seedUpdateInfo, graceful).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -43,30 +52,33 @@ internal sealed class LauncherRuntime(
         }
         else
         {
-            try
+            UpdateInfo? bootCheck = SelectBootUpdate(seedUpdateInfo, currentVersion);
+            if (bootCheck is not null)
             {
-                UpdateInfo? bootCheck = await source.CheckForUpdateAsync(currentVersion, graceful).ConfigureAwait(false);
-                if (bootCheck is not null)
+                ConsoleOutput.Husky($"new version found: v{bootCheck.Version}");
+                try
                 {
-                    ConsoleOutput.Husky($"new version found: v{bootCheck.Version}");
                     await ApplyUpdateAtBootAsync(bootCheck, graceful).ConfigureAwait(false);
                     ConsoleOutput.Husky($"update succeeded — now on v{bootCheck.Version}");
                     currentVersion = AppVersionReader.ReadCurrent(executablePath);
                 }
-                else
+                catch (OperationCanceledException) when (graceful.IsCancellationRequested)
                 {
-                    ConsoleOutput.Husky("up to date.");
+                    return ExitCodes.Ok;
+                }
+                catch (Exception ex)
+                {
+                    ConsoleOutput.Husky($"update aborted: {ex.Message}");
+                    // Continue with the existing install — polling will retry.
                 }
             }
-            catch (OperationCanceledException) when (graceful.IsCancellationRequested)
+            else if (seedUpdateInfo is null)
             {
-                return ExitCodes.Ok;
+                ConsoleOutput.Husky("source unreachable — running with last installed version.");
             }
-            catch (Exception ex)
+            else
             {
-                ConsoleOutput.Husky($"update check failed: {ex.Message}");
-                // Continue — boot-time check failure does not block startup
-                // when an app is already installed.
+                ConsoleOutput.Husky("up to date.");
             }
         }
 
@@ -272,19 +284,29 @@ internal sealed class LauncherRuntime(
         }
     }
 
-    private async Task<string> BootstrapAsync(string currentVersion, CancellationToken ct)
+    private async Task<string> BootstrapAsync(UpdateInfo seed, CancellationToken ct)
     {
-        UpdateInfo? update = await source.CheckForUpdateAsync(currentVersion, ct).ConfigureAwait(false);
-        if (update is null)
-            throw new UpdateException("source has no version available for bootstrap.");
-
-        ConsoleOutput.Husky($"new version found: v{update.Version}");
+        ConsoleOutput.Husky($"new version found: v{seed.Version}");
         await updateFlow.RunAsync(
-            update,
+            seed,
             stopAppAsync: _ => Task.CompletedTask,
             startAppAndAwaitHelloAsync: _ => Task.CompletedTask,
             ct: ct).ConfigureAwait(false);
-        return update.Version;
+        return seed.Version;
+    }
+
+    /// <summary>
+    /// Decide whether the seeded UpdateInfo represents a release newer than
+    /// what's currently installed. The seed was polled with currentVersion
+    /// "0.0.0" (during config resolution) so we re-compare against the
+    /// installed version here.
+    /// </summary>
+    private static UpdateInfo? SelectBootUpdate(UpdateInfo? seed, string currentVersion)
+    {
+        if (seed is null) return null;
+        if (!SemanticVersion.TryParse(seed.Version, out SemanticVersion remote)) return null;
+        if (!SemanticVersion.TryParse(currentVersion, out SemanticVersion current)) return null;
+        return remote > current ? seed : null;
     }
 
     private async Task ApplyUpdateAtBootAsync(UpdateInfo update, CancellationToken ct)
