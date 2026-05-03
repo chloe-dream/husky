@@ -23,7 +23,7 @@ Read the section that matches what you're trying to do.
 
 ### 1. You're an **app author** — make your app Husky-compatible
 
-Reference the [`Husky.Client`](./src/Husky.Client) NuGet package and add three lines to `Program.cs`:
+Reference the [`Husky.Client`](https://www.nuget.org/packages/Husky.Client) NuGet package (`dotnet add package Husky.Client`) and add three lines to `Program.cs`:
 
 ```csharp
 using Husky.Client;
