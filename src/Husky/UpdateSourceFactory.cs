@@ -21,7 +21,7 @@ internal static class UpdateSourceFactory
             SourceConfig.GitHubType => new GitHubUpdateSource(
                 httpClient,
                 config.Repo ?? throw new HuskyConfigException("source.repo is required for github."),
-                config.Asset ?? throw new HuskyConfigException("source.asset is required for github."),
+                config.Asset, // optional — null means "first .zip asset"
                 launcherVersion,
                 allowPreRelease: config.AllowPreRelease),
             SourceConfig.HttpType => new HttpUpdateSource(

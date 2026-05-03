@@ -85,7 +85,7 @@ See [`samples/`](./samples) for full templates.
 > 1. Download the launcher binary for your OS from the [Husky releases page](https://github.com/Chloe3DX/husky/releases). Extract `Husky.exe` (Windows) or `Husky` (Linux).
 > 2. Save it in a folder of your choice. Next to it, create `husky.config.json`:
 >    ```json
->    { "source": { "type": "github", "repo": "your-org/your-app", "asset": "YourApp-{version}.zip" } }
+>    { "source": { "type": "github", "repo": "your-org/your-app" } }
 >    ```
 > 3. Run the launcher. It downloads and starts the app on first run; updates are handled automatically thereafter.
 
@@ -98,17 +98,18 @@ Many app distributors ship a one-file installer that bundles Husky for you — i
 1. Download the launcher binary for your OS from the [Husky releases page](https://github.com/Chloe3DX/husky/releases). Pick the trim build (`husky-vX.Y.Z-<rid>.zip` / `.tar.gz`); the `-aot` variant is a smaller native build with the same behaviour. Extract `Husky.exe` (Windows) or `Husky` (Linux).
 2. Make a folder somewhere portable — Desktop, USB stick, `~/apps/fishbowl/`, anywhere.
 3. Drop the launcher binary in.
-4. Save a `husky.config.json` next to it. The minimum:
+4. Save a `husky.config.json` next to it. The minimum (Husky will pick the first `.zip` asset on the latest release):
 
    ```json
    {
      "source": {
        "type": "github",
-       "repo": "chloe-dream/the-fishbowl",
-       "asset": "Fishbowl-{version}.zip"
+       "repo": "chloe-dream/the-fishbowl"
      }
    }
    ```
+
+   Add `"asset": "Fishbowl-{version}.zip"` if a release ships multiple `.zip` files and you need to pick a specific one.
 
 5. Run the launcher. First run pulls the app's deployment metadata (`name`, `executable`, timing knobs) from the source itself, downloads the latest release into `app/`, and starts it. From there: auto-updates (or manual, if the app prefers — its UI will tell you).
 

@@ -61,8 +61,8 @@ internal static class HuskyConfigLoader
             case SourceConfig.GitHubType:
                 if (string.IsNullOrWhiteSpace(source.Repo))
                     throw new HuskyConfigException("Config field 'source.repo' is required for type 'github'.");
-                if (string.IsNullOrWhiteSpace(source.Asset))
-                    throw new HuskyConfigException("Config field 'source.asset' is required for type 'github'.");
+                // source.asset is optional — if omitted, the provider picks
+                // the first .zip asset (LEASH §9.2).
                 break;
 
             case SourceConfig.HttpType:

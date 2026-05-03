@@ -10,9 +10,10 @@ file are not.
 ## User-side files (drop next to `Husky.exe`)
 
 - **`husky.config.minimal.json`** — the smallest possible local config.
-  Just `source`, nothing else. Husky pulls `name`, `executable`, and
-  timing from the source itself. Use this when the app author has
-  shipped a `husky.config.json` in their repo / release / manifest.
+  Just `source`, nothing else (and the `source.asset` pattern omitted —
+  Husky picks the first `.zip` asset on the release). Use this when the
+  app author has shipped a `husky.config.json` in their repo / release /
+  manifest.
 - **`husky.config.github.json`** — local override for a GitHub-sourced
   app. Includes `name`, `executable`, and timing knobs explicitly. Use
   when you want full control or the app author hasn't shipped any
@@ -20,8 +21,10 @@ file are not.
 - **`husky.config.http.json`** — local override for an HTTP-manifest
   source.
 
-`{version}` in `source.asset` has no `v` prefix — Husky strips a leading
-`v` from the GitHub `tag_name` before substitution.
+`source.asset` is optional. When set, `{version}` has no `v` prefix —
+Husky strips a leading `v` from the GitHub `tag_name` before
+substitution. When omitted, Husky picks the first asset on the release
+whose name ends with `.zip` (skipping `husky.config.json` itself).
 
 ## Author-side files (you ship these with your app)
 

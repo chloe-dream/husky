@@ -151,14 +151,17 @@ public sealed class HuskyConfigLoaderTests
     }
 
     [Fact]
-    public void Parse_throws_when_github_source_lacks_asset()
+    public void Parse_accepts_github_source_without_an_asset_pattern()
     {
+        // LEASH §9.2: source.asset is optional — when absent the provider
+        // picks the first .zip asset on the release.
         const string json = """{ "source": { "type": "github", "repo": "x/y" } }""";
 
-        HuskyConfigException ex = Assert.Throws<HuskyConfigException>(
-            () => HuskyConfigLoader.Parse(json));
+        LocalHuskyConfig config = HuskyConfigLoader.Parse(json);
 
-        Assert.Contains("asset", ex.Message, StringComparison.Ordinal);
+        Assert.Equal(SourceConfig.GitHubType, config.Source.Type);
+        Assert.Equal("x/y", config.Source.Repo);
+        Assert.Null(config.Source.Asset);
     }
 
     [Fact]

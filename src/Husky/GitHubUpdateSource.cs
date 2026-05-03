@@ -17,7 +17,7 @@ internal sealed class GitHubUpdateSource(
     HttpClient httpClient,
     Uri apiBase,
     string repo,
-    string assetPattern,
+    string? assetPattern,
     string launcherVersion,
     bool allowPreRelease = false,
     Uri? rawBase = null) : IUpdateSource
@@ -30,7 +30,7 @@ internal sealed class GitHubUpdateSource(
     private readonly Uri rawBase = rawBase ?? new Uri(DefaultRawBase);
 
     public GitHubUpdateSource(
-        HttpClient httpClient, string repo, string assetPattern, string launcherVersion, bool allowPreRelease = false)
+        HttpClient httpClient, string repo, string? assetPattern, string launcherVersion, bool allowPreRelease = false)
         : this(httpClient, new Uri(DefaultApiBase), repo, assetPattern, launcherVersion, allowPreRelease)
     {
     }
@@ -68,13 +68,15 @@ internal sealed class GitHubUpdateSource(
         if (!SemanticVersion.TryParse(currentVersion, out SemanticVersion current)) return null;
         if (remote <= current) return null;
 
-        string expectedAssetName = assetPattern.Replace(VersionPlaceholder, remoteVersion, StringComparison.Ordinal);
-        GitHubAssetDto? asset = release.Assets?.FirstOrDefault(a =>
-            string.Equals(a.Name, expectedAssetName, StringComparison.OrdinalIgnoreCase));
-
+        GitHubAssetDto? asset = SelectAsset(release, remoteVersion);
         if (asset is null || string.IsNullOrWhiteSpace(asset.BrowserDownloadUrl))
+        {
+            string description = string.IsNullOrWhiteSpace(assetPattern)
+                ? "any .zip"
+                : $"'{assetPattern.Replace(VersionPlaceholder, remoteVersion, StringComparison.Ordinal)}'";
             throw new UpdateException(
-                $"GitHub release {release.TagName} has no asset matching '{expectedAssetName}'.");
+                $"GitHub release {release.TagName} has no asset matching {description}.");
+        }
 
         if (!Uri.TryCreate(asset.BrowserDownloadUrl, UriKind.Absolute, out Uri? downloadUrl))
             throw new UpdateException(
@@ -154,6 +156,29 @@ internal sealed class GitHubUpdateSource(
         {
             response.Dispose();
         }
+    }
+
+    /// <summary>
+    /// Picks the release asset matching the configured pattern, or — when
+    /// no pattern is configured — the first asset whose name ends with
+    /// <c>.zip</c> (LEASH §9.2 fallback). The husky.config.json asset is
+    /// excluded from the fallback so it never gets mistaken for the app.
+    /// </summary>
+    private GitHubAssetDto? SelectAsset(GitHubReleaseDto release, string remoteVersion)
+    {
+        if (release.Assets is null) return null;
+
+        if (!string.IsNullOrWhiteSpace(assetPattern))
+        {
+            string expectedName = assetPattern.Replace(VersionPlaceholder, remoteVersion, StringComparison.Ordinal);
+            return release.Assets.FirstOrDefault(a =>
+                string.Equals(a.Name, expectedName, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return release.Assets.FirstOrDefault(a =>
+            !string.IsNullOrWhiteSpace(a.Name)
+            && !string.Equals(a.Name, ConfigAssetName, StringComparison.OrdinalIgnoreCase)
+            && a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
     }
 
     private static string StripVersionPrefix(string tag)

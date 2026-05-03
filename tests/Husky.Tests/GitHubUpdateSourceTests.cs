@@ -288,6 +288,55 @@ public sealed class GitHubUpdateSourceTests
     }
 
     [Fact]
+    public async Task CheckForUpdateAsync_picks_first_zip_asset_when_pattern_is_omitted()
+    {
+        // LEASH §9.2 — null/empty assetPattern means "first .zip on the release".
+        // husky.config.json must be excluded so it never gets mistaken for the app.
+        await using FakeHttpServer server = FakeHttpServer.StartEmpty();
+        server.MapJson("/repos/x/y/releases/latest", $$"""
+            {
+              "tag_name": "v2.0.0",
+              "assets": [
+                { "name": "husky.config.json", "browser_download_url": "{{server.Address}}config.json" },
+                { "name": "checksums.txt", "browser_download_url": "{{server.Address}}sums.txt" },
+                { "name": "MyApp-2.0.0.zip", "browser_download_url": "{{server.Address}}myapp.zip" }
+              ]
+            }
+            """);
+
+        using HttpClient http = new();
+        GitHubUpdateSource source = new(
+            http, server.Address, "x/y", assetPattern: null, "0.1.0", rawBase: server.Address);
+
+        UpdateInfo? update = await source.CheckForUpdateAsync("1.0.0", CancellationToken.None);
+
+        Assert.NotNull(update);
+        Assert.EndsWith("myapp.zip", update!.DownloadUrl.ToString());
+    }
+
+    [Fact]
+    public async Task CheckForUpdateAsync_throws_when_pattern_is_omitted_and_no_zip_assets_exist()
+    {
+        await using FakeHttpServer server = FakeHttpServer.StartEmpty();
+        server.MapJson("/repos/x/y/releases/latest", $$"""
+            {
+              "tag_name": "v2.0.0",
+              "assets": [
+                { "name": "checksums.txt", "browser_download_url": "{{server.Address}}sums.txt" }
+              ]
+            }
+            """);
+
+        using HttpClient http = new();
+        GitHubUpdateSource source = new(
+            http, server.Address, "x/y", assetPattern: null, "0.1.0", rawBase: server.Address);
+
+        UpdateException ex = await Assert.ThrowsAsync<UpdateException>(() =>
+            source.CheckForUpdateAsync("1.0.0", CancellationToken.None));
+        Assert.Contains("any .zip", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task CheckForUpdateAsync_flags_source_field_dropped_when_config_contains_source()
     {
         await using FakeHttpServer server = FakeHttpServer.StartEmpty();
