@@ -23,7 +23,7 @@ public sealed class GitHubUpdateSourceTests
             """);
 
         using HttpClient http = new();
-        GitHubUpdateSource source = new(http, server.Address, "chloe/umbrella", "UmbrellaBot-{version}.zip", "0.1.0");
+        GitHubUpdateSource source = new(http, server.Address, "chloe/umbrella", "UmbrellaBot-{version}.zip", "0.1.0", rawBase: server.Address);
 
         UpdateInfo? update = await source.CheckForUpdateAsync("1.4.2", CancellationToken.None);
 
@@ -45,7 +45,7 @@ public sealed class GitHubUpdateSourceTests
             """);
 
         using HttpClient http = new();
-        GitHubUpdateSource source = new(http, server.Address, "x/y", "pkg-{version}.zip", "0.1.0");
+        GitHubUpdateSource source = new(http, server.Address, "x/y", "pkg-{version}.zip", "0.1.0", rawBase: server.Address);
 
         Assert.Null(await source.CheckForUpdateAsync("1.0.0", CancellationToken.None));
         Assert.Null(await source.CheckForUpdateAsync("1.0.1", CancellationToken.None));
@@ -63,7 +63,7 @@ public sealed class GitHubUpdateSourceTests
             """);
 
         using HttpClient http = new();
-        GitHubUpdateSource source = new(http, server.Address, "x/y", "pkg-{version}.zip", "0.1.0");
+        GitHubUpdateSource source = new(http, server.Address, "x/y", "pkg-{version}.zip", "0.1.0", rawBase: server.Address);
 
         UpdateInfo? update = await source.CheckForUpdateAsync("1.0.0", CancellationToken.None);
         Assert.Equal("2.0.0", update!.Version);
@@ -101,7 +101,7 @@ public sealed class GitHubUpdateSourceTests
             """);
 
         using HttpClient http = new();
-        GitHubUpdateSource source = new(http, server.Address, "x/y", "pkg-{version}.zip", "0.1.0");
+        GitHubUpdateSource source = new(http, server.Address, "x/y", "pkg-{version}.zip", "0.1.0", rawBase: server.Address);
 
         Assert.Null(await source.CheckForUpdateAsync("1.0.0", CancellationToken.None));
     }
@@ -119,7 +119,7 @@ public sealed class GitHubUpdateSourceTests
             """);
 
         using HttpClient http = new();
-        GitHubUpdateSource source = new(http, server.Address, "x/y", "pkg-{version}.zip", "0.1.0");
+        GitHubUpdateSource source = new(http, server.Address, "x/y", "pkg-{version}.zip", "0.1.0", rawBase: server.Address);
 
         Assert.Null(await source.CheckForUpdateAsync("1.0.0", CancellationToken.None));
     }
@@ -138,7 +138,7 @@ public sealed class GitHubUpdateSourceTests
 
         using HttpClient http = new();
         GitHubUpdateSource source = new(
-            http, server.Address, "x/y", "pkg-{version}.zip", "0.1.0", allowPreRelease: true);
+            http, server.Address, "x/y", "pkg-{version}.zip", "0.1.0", allowPreRelease: true, rawBase: server.Address);
 
         UpdateInfo? update = await source.CheckForUpdateAsync("1.0.0", CancellationToken.None);
         Assert.NotNull(update);
@@ -158,7 +158,7 @@ public sealed class GitHubUpdateSourceTests
             """);
 
         using HttpClient http = new();
-        GitHubUpdateSource source = new(http, server.Address, "x/y", "pkg-{version}.zip", "0.1.0");
+        GitHubUpdateSource source = new(http, server.Address, "x/y", "pkg-{version}.zip", "0.1.0", rawBase: server.Address);
 
         Assert.Null(await source.CheckForUpdateAsync("1.0.0", CancellationToken.None));
     }
@@ -170,7 +170,7 @@ public sealed class GitHubUpdateSourceTests
         server.MapStatus("/repos/x/y/releases/latest", (int)HttpStatusCode.NotFound);
 
         using HttpClient http = new();
-        GitHubUpdateSource source = new(http, server.Address, "x/y", "pkg-{version}.zip", "0.1.0");
+        GitHubUpdateSource source = new(http, server.Address, "x/y", "pkg-{version}.zip", "0.1.0", rawBase: server.Address);
 
         await Assert.ThrowsAsync<HttpRequestException>(() =>
             source.CheckForUpdateAsync("1.0.0", CancellationToken.None));
@@ -191,10 +191,128 @@ public sealed class GitHubUpdateSourceTests
         });
 
         using HttpClient http = new();
-        GitHubUpdateSource source = new(http, server.Address, "x/y", "pkg-{version}.zip", "0.1.0");
+        GitHubUpdateSource source = new(http, server.Address, "x/y", "pkg-{version}.zip", "0.1.0", rawBase: server.Address);
 
         await source.CheckForUpdateAsync("1.0.0", CancellationToken.None);
 
         Assert.Contains("Husky/0.1.0", capturedUserAgent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CheckForUpdateAsync_populates_config_from_husky_config_release_asset()
+    {
+        // LEASH §9.2 — first lookup path: a release asset literally named
+        // husky.config.json next to the actual release ZIP.
+        await using FakeHttpServer server = FakeHttpServer.StartEmpty();
+        server.MapJson("/repos/x/y/releases/latest", $$"""
+            {
+              "tag_name": "v2.0.0",
+              "assets": [
+                { "name": "pkg-2.0.0.zip", "browser_download_url": "{{server.Address}}pkg.zip" },
+                { "name": "husky.config.json", "browser_download_url": "{{server.Address}}config-asset.json" }
+              ]
+            }
+            """);
+        server.MapJson("/config-asset.json", """
+            {
+              "name": "fishbowl",
+              "executable": "Fishbowl.exe",
+              "checkMinutes": 15
+            }
+            """);
+
+        using HttpClient http = new();
+        GitHubUpdateSource source = new(http, server.Address, "x/y", "pkg-{version}.zip", "0.1.0", rawBase: server.Address);
+
+        UpdateInfo? update = await source.CheckForUpdateAsync("1.0.0", CancellationToken.None);
+
+        Assert.NotNull(update?.Config);
+        Assert.Equal("fishbowl", update!.Config!.Name);
+        Assert.Equal("Fishbowl.exe", update.Config.Executable);
+        Assert.Equal(15, update.Config.CheckMinutes);
+    }
+
+    [Fact]
+    public async Task CheckForUpdateAsync_falls_back_to_repo_root_for_husky_config()
+    {
+        // LEASH §9.2 — second lookup path: raw.githubusercontent.com/<repo>/HEAD/husky.config.json
+        // when no asset by that name exists.
+        await using FakeHttpServer server = FakeHttpServer.StartEmpty();
+        server.MapJson("/repos/x/y/releases/latest", $$"""
+            {
+              "tag_name": "v2.0.0",
+              "assets": [
+                { "name": "pkg-2.0.0.zip", "browser_download_url": "{{server.Address}}pkg.zip" }
+              ]
+            }
+            """);
+        server.MapJson("/x/y/HEAD/husky.config.json", """
+            {
+              "name": "fallback-app",
+              "executable": "FallbackApp.exe"
+            }
+            """);
+
+        using HttpClient http = new();
+        GitHubUpdateSource source = new(http, server.Address, "x/y", "pkg-{version}.zip", "0.1.0", rawBase: server.Address);
+
+        UpdateInfo? update = await source.CheckForUpdateAsync("1.0.0", CancellationToken.None);
+
+        Assert.NotNull(update?.Config);
+        Assert.Equal("fallback-app", update!.Config!.Name);
+    }
+
+    [Fact]
+    public async Task CheckForUpdateAsync_returns_null_config_when_neither_lookup_finds_anything()
+    {
+        // Both the asset path and the repo-root path return 404 → no config,
+        // no exception, update still proceeds.
+        await using FakeHttpServer server = FakeHttpServer.StartEmpty();
+        server.MapJson("/repos/x/y/releases/latest", $$"""
+            {
+              "tag_name": "v2.0.0",
+              "assets": [
+                { "name": "pkg-2.0.0.zip", "browser_download_url": "{{server.Address}}pkg.zip" }
+              ]
+            }
+            """);
+
+        using HttpClient http = new();
+        GitHubUpdateSource source = new(http, server.Address, "x/y", "pkg-{version}.zip", "0.1.0", rawBase: server.Address);
+
+        UpdateInfo? update = await source.CheckForUpdateAsync("1.0.0", CancellationToken.None);
+
+        Assert.NotNull(update);
+        Assert.Null(update!.Config);
+        Assert.False(update.SourceFieldDropped);
+    }
+
+    [Fact]
+    public async Task CheckForUpdateAsync_flags_source_field_dropped_when_config_contains_source()
+    {
+        await using FakeHttpServer server = FakeHttpServer.StartEmpty();
+        server.MapJson("/repos/x/y/releases/latest", $$"""
+            {
+              "tag_name": "v2.0.0",
+              "assets": [
+                { "name": "pkg-2.0.0.zip", "browser_download_url": "{{server.Address}}pkg.zip" }
+              ]
+            }
+            """);
+        server.MapJson("/x/y/HEAD/husky.config.json", """
+            {
+              "name": "x",
+              "executable": "x.exe",
+              "source": { "type": "github", "repo": "evil/redirect" }
+            }
+            """);
+
+        using HttpClient http = new();
+        GitHubUpdateSource source = new(http, server.Address, "x/y", "pkg-{version}.zip", "0.1.0", rawBase: server.Address);
+
+        UpdateInfo? update = await source.CheckForUpdateAsync("1.0.0", CancellationToken.None);
+
+        Assert.NotNull(update?.Config);
+        Assert.True(update!.SourceFieldDropped);
     }
 }

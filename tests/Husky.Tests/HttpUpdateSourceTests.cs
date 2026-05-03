@@ -113,4 +113,83 @@ public sealed class HttpUpdateSourceTests
 
         Assert.Contains("Husky/0.1.0", capturedUserAgent, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task CheckForUpdateAsync_populates_source_supplied_config_from_manifest()
+    {
+        // LEASH §9.3 — manifest's optional `config:` block carries deployment
+        // metadata (name, executable, timing knobs) that the launcher merges
+        // with local config per §5.2.
+        await using FakeHttpServer server = FakeHttpServer.StartEmpty();
+        server.MapJson("/manifest.json", """
+            {
+              "version": "1.4.3",
+              "url": "https://example.test/UmbrellaBot-1.4.3.zip",
+              "config": {
+                "name": "umbrella-bot",
+                "executable": "app/UmbrellaBot.exe",
+                "checkMinutes": 30,
+                "shutdownTimeoutSec": 90
+              }
+            }
+            """);
+
+        using HttpClient http = new();
+        HttpUpdateSource source = new(http, server.Url("manifest.json"), "0.1.0");
+
+        UpdateInfo? update = await source.CheckForUpdateAsync("1.4.2", CancellationToken.None);
+
+        Assert.NotNull(update?.Config);
+        Assert.Equal("umbrella-bot", update!.Config!.Name);
+        Assert.Equal("app/UmbrellaBot.exe", update.Config.Executable);
+        Assert.Equal(30, update.Config.CheckMinutes);
+        Assert.Equal(90, update.Config.ShutdownTimeoutSec);
+        Assert.False(update.SourceFieldDropped);
+    }
+
+    [Fact]
+    public async Task CheckForUpdateAsync_flags_source_field_dropped_when_present_in_config()
+    {
+        // Anti-redirect: a source-supplied config must never carry its own
+        // `source` block. The provider drops it and signals SourceFieldDropped
+        // so the launcher can warn the app author.
+        await using FakeHttpServer server = FakeHttpServer.StartEmpty();
+        server.MapJson("/manifest.json", """
+            {
+              "version": "1.0.0",
+              "url": "https://example.test/p.zip",
+              "config": {
+                "name": "x",
+                "executable": "x.exe",
+                "source": { "type": "github", "repo": "evil/redirect" }
+              }
+            }
+            """);
+
+        using HttpClient http = new();
+        HttpUpdateSource source = new(http, server.Url("manifest.json"), "0.1.0");
+
+        UpdateInfo? update = await source.CheckForUpdateAsync("0.9.0", CancellationToken.None);
+
+        Assert.NotNull(update?.Config);
+        Assert.True(update!.SourceFieldDropped);
+    }
+
+    [Fact]
+    public async Task CheckForUpdateAsync_returns_null_config_when_manifest_omits_block()
+    {
+        await using FakeHttpServer server = FakeHttpServer.StartEmpty();
+        server.MapJson("/manifest.json", """
+            { "version": "2.0.0", "url": "https://example.test/p.zip" }
+            """);
+
+        using HttpClient http = new();
+        HttpUpdateSource source = new(http, server.Url("manifest.json"), "0.1.0");
+
+        UpdateInfo? update = await source.CheckForUpdateAsync("1.0.0", CancellationToken.None);
+
+        Assert.NotNull(update);
+        Assert.Null(update!.Config);
+        Assert.False(update.SourceFieldDropped);
+    }
 }

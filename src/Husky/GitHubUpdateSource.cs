@@ -1,6 +1,6 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using System.Text.Json;
 
 namespace Husky;
 
@@ -9,6 +9,9 @@ namespace Husky;
 /// <c>/repos/{repo}/releases/latest</c>, looks for an asset matching the
 /// configured pattern (<c>{version}</c> placeholder substituted), and returns
 /// an <see cref="UpdateInfo"/> if the release is newer than the current app.
+/// Also fetches <c>husky.config.json</c> for source-supplied deployment
+/// metadata: first as a release asset, then from the repo's default-branch
+/// root.
 /// </summary>
 internal sealed class GitHubUpdateSource(
     HttpClient httpClient,
@@ -16,10 +19,15 @@ internal sealed class GitHubUpdateSource(
     string repo,
     string assetPattern,
     string launcherVersion,
-    bool allowPreRelease = false) : IUpdateSource
+    bool allowPreRelease = false,
+    Uri? rawBase = null) : IUpdateSource
 {
     public const string DefaultApiBase = "https://api.github.com/";
+    public const string DefaultRawBase = "https://raw.githubusercontent.com/";
+    public const string ConfigAssetName = "husky.config.json";
     public const string VersionPlaceholder = "{version}";
+
+    private readonly Uri rawBase = rawBase ?? new Uri(DefaultRawBase);
 
     public GitHubUpdateSource(
         HttpClient httpClient, string repo, string assetPattern, string launcherVersion, bool allowPreRelease = false)
@@ -72,7 +80,80 @@ internal sealed class GitHubUpdateSource(
             throw new UpdateException(
                 $"GitHub asset '{asset.Name}' has an invalid download URL: '{asset.BrowserDownloadUrl}'.");
 
-        return new UpdateInfo(remoteVersion, downloadUrl, Sha256: null);
+        (SourceSuppliedConfig? config, bool sourceFieldDropped) =
+            await FetchSourceSuppliedConfigAsync(release, ct).ConfigureAwait(false);
+
+        return new UpdateInfo(
+            Version: remoteVersion,
+            DownloadUrl: downloadUrl,
+            Sha256: null,
+            Config: config,
+            SourceFieldDropped: sourceFieldDropped);
+    }
+
+    private async Task<(SourceSuppliedConfig? Config, bool SourceFieldDropped)> FetchSourceSuppliedConfigAsync(
+        GitHubReleaseDto release, CancellationToken ct)
+    {
+        // 1. Try a release asset literally named husky.config.json.
+        GitHubAssetDto? configAsset = release.Assets?.FirstOrDefault(a =>
+            string.Equals(a.Name, ConfigAssetName, StringComparison.OrdinalIgnoreCase));
+        if (configAsset is { BrowserDownloadUrl: { Length: > 0 } downloadUrl }
+            && Uri.TryCreate(downloadUrl, UriKind.Absolute, out Uri? assetUri))
+        {
+            (SourceSuppliedConfig? fromAsset, bool fromAssetDropped) =
+                await TryFetchConfigAsync(assetUri, ct).ConfigureAwait(false);
+            if (fromAsset is not null) return (fromAsset, fromAssetDropped);
+        }
+
+        // 2. Fall back to the repo's default-branch root.
+        Uri rawUri = new(rawBase, $"{repo}/HEAD/{ConfigAssetName}");
+        return await TryFetchConfigAsync(rawUri, ct).ConfigureAwait(false);
+    }
+
+    private async Task<(SourceSuppliedConfig? Config, bool SourceFieldDropped)> TryFetchConfigAsync(
+        Uri url, CancellationToken ct)
+    {
+        using HttpRequestMessage request = new(HttpMethod.Get, url);
+        request.Headers.UserAgent.Add(new ProductInfoHeaderValue("Husky", launcherVersion));
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await httpClient
+                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct)
+                .ConfigureAwait(false);
+        }
+        catch (HttpRequestException)
+        {
+            // Network glitch fetching the config is not fatal — we just have no config.
+            return (null, false);
+        }
+
+        try
+        {
+            if (response.StatusCode == HttpStatusCode.NotFound) return (null, false);
+            if (!response.IsSuccessStatusCode) return (null, false);
+
+            SourceSuppliedConfigDto? dto;
+            try
+            {
+                dto = await response.Content
+                    .ReadFromJsonAsync(HuskySourceJsonContext.Default.SourceSuppliedConfigDto, ct)
+                    .ConfigureAwait(false);
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                // Malformed husky.config.json should not block updates — just no source-supplied data.
+                return (null, false);
+            }
+
+            return dto?.ToDomain() ?? (null, false);
+        }
+        finally
+        {
+            response.Dispose();
+        }
     }
 
     private static string StripVersionPrefix(string tag)

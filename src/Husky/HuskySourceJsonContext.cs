@@ -7,4 +7,5 @@ namespace Husky;
     AllowTrailingCommas = true)]
 [JsonSerializable(typeof(GitHubReleaseDto))]
 [JsonSerializable(typeof(HttpManifestDto))]
+[JsonSerializable(typeof(SourceSuppliedConfigDto))]
 internal sealed partial class HuskySourceJsonContext : JsonSerializerContext;

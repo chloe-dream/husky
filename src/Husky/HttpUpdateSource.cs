@@ -44,9 +44,18 @@ internal sealed class HttpUpdateSource(
         if (!Uri.TryCreate(manifest.Url, UriKind.Absolute, out Uri? downloadUrl))
             throw new UpdateException($"Manifest 'url' is not an absolute URL: '{manifest.Url}'.");
 
+        SourceSuppliedConfig? config = null;
+        bool sourceFieldDropped = false;
+        if (manifest.Config is not null)
+        {
+            (config, sourceFieldDropped) = manifest.Config.ToDomain();
+        }
+
         return new UpdateInfo(
             Version: manifest.Version,
             DownloadUrl: downloadUrl,
-            Sha256: string.IsNullOrWhiteSpace(manifest.Sha256) ? null : manifest.Sha256);
+            Sha256: string.IsNullOrWhiteSpace(manifest.Sha256) ? null : manifest.Sha256,
+            Config: config,
+            SourceFieldDropped: sourceFieldDropped);
     }
 }
