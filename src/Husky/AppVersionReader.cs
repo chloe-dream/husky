@@ -18,8 +18,30 @@ internal static class AppVersionReader
         if (!File.Exists(executablePath))
             return BootstrapVersion;
 
-        FileVersionInfo info = FileVersionInfo.GetVersionInfo(executablePath);
-        string? fileVersion = info.FileVersion;
-        return string.IsNullOrWhiteSpace(fileVersion) ? BootstrapVersion : fileVersion;
+        // The .NET apphost is stamped with FileVersion on Windows but NOT on
+        // Linux/macOS — so reading the apphost directly returns nothing on
+        // those platforms. The managed assembly (.dll) next to the apphost is
+        // always stamped with AssemblyFileVersion, so prefer it when present.
+        // Single-file published binaries have no sibling .dll; the apphost
+        // itself is the bundle and carries the version, so we fall back to it.
+        string? managedAssembly = TryFindManagedAssembly(executablePath);
+        if (managedAssembly is not null)
+        {
+            string? fromDll = FileVersionInfo.GetVersionInfo(managedAssembly).FileVersion;
+            if (!string.IsNullOrWhiteSpace(fromDll)) return fromDll;
+        }
+
+        string? fromExe = FileVersionInfo.GetVersionInfo(executablePath).FileVersion;
+        return string.IsNullOrWhiteSpace(fromExe) ? BootstrapVersion : fromExe;
+    }
+
+    private static string? TryFindManagedAssembly(string executablePath)
+    {
+        string? directory = Path.GetDirectoryName(executablePath);
+        string stem = Path.GetFileNameWithoutExtension(executablePath);
+        if (directory is null || string.IsNullOrEmpty(stem)) return null;
+
+        string candidate = Path.Combine(directory, stem + ".dll");
+        return File.Exists(candidate) ? candidate : null;
     }
 }
