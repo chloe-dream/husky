@@ -1,5 +1,5 @@
 using System.Text.RegularExpressions;
-using Spectre.Console;
+using Retro.Crt;
 
 namespace Husky;
 
@@ -7,39 +7,86 @@ internal static partial class ConsoleOutput
 {
     private const int SourceWidth = 8;
 
-    public static void Husky(string message) => Render("husky", "cyan", message);
-    public static void AppOut(string message) => Render("app", "green", message);
-    public static void AppErr(string message) => Render("app", "red", message);
-    public static void Pipe(string message) => Render("pipe", "grey50", message);
+    public static void Husky(string message) => Render("husky", Color.LightCyan,  message);
+    public static void AppOut(string message) => Render("app",   Color.LightGreen, message);
+    public static void AppErr(string message) => Render("app",   Color.LightRed,   message);
+    public static void Pipe(string message)   => Render("pipe",  Color.DarkGray,   message);
 
-    private static void Render(string source, string color, string message) =>
-        AnsiConsole.MarkupLine(BuildMarkup(DateTime.Now, source, color, message));
-
-    internal static string BuildMarkup(DateTime when, string source, string color, string message)
+    private static void Render(string source, Color sourceColor, string message)
     {
-        string timestamp = when.ToString("HH:mm:ss");
-        string padded = source.Length >= SourceWidth ? source : source.PadRight(SourceWidth);
-        string body = ApplyStatusHighlights(Markup.Escape(message));
-        return $"[grey]{timestamp}[/]  [{color}]{padded}[/]  {body}";
+        var line = BuildLine(DateTime.Now, source, sourceColor, message);
+        for (var i = 0; i < line.Count; i++)
+        {
+            var seg = line[i];
+            if (seg.Color is { } c)
+            {
+                using (Crt.WithStyle(fg: c)) Crt.Write(seg.Text);
+            }
+            else
+            {
+                Crt.Write(seg.Text);
+            }
+        }
+        Crt.WriteLine();
     }
 
     /// <summary>
-    /// Re-colours the well-known status verbs (LEASH §10.3) inside an
-    /// already-escaped message body. The match runs on word boundaries to
-    /// avoid colouring substrings of identifiers like "shutdown-ack".
+    /// Build the rendered line as a list of (text, color) segments. Pure and
+    /// allocation-bounded; the test suite drives this directly to verify the
+    /// timestamp format, source padding, and status-word highlighting without
+    /// having to capture <see cref="Console.Out"/>.
     /// </summary>
-    private static string ApplyStatusHighlights(string escaped) =>
-        StatusWordRegex().Replace(escaped, match => match.Value switch
+    internal static IReadOnlyList<LineSegment> BuildLine(
+        DateTime when, string source, Color sourceColor, string message)
+    {
+        var timestamp = when.ToString("HH:mm:ss");
+        var paddedSource = source.Length >= SourceWidth ? source : source.PadRight(SourceWidth);
+
+        var segments = new List<LineSegment>(8)
         {
-            "up" => "[green]up[/]",
-            "down" => "[red]down[/]",
-            "healthy" => "[green]healthy[/]",
-            "degraded" => "[yellow]degraded[/]",
-            "unhealthy" => "[red]unhealthy[/]",
-            "growling" => "[yellow]growling[/]",
-            _ => match.Value,
-        });
+            new(timestamp, Color.DarkGray),
+            new("  "),
+            new(paddedSource, sourceColor),
+            new("  "),
+        };
+
+        AppendMessage(segments, message);
+        return segments;
+    }
+
+    private static void AppendMessage(List<LineSegment> segments, string message)
+    {
+        var matches = StatusWordRegex().Matches(message);
+        if (matches.Count == 0)
+        {
+            segments.Add(new(message));
+            return;
+        }
+
+        var pos = 0;
+        for (var i = 0; i < matches.Count; i++)
+        {
+            var m = matches[i];
+            if (m.Index > pos) segments.Add(new(message[pos..m.Index]));
+            segments.Add(new(m.Value, ColorForStatusWord(m.Value)));
+            pos = m.Index + m.Length;
+        }
+        if (pos < message.Length) segments.Add(new(message[pos..]));
+    }
+
+    private static Color ColorForStatusWord(string word) => word switch
+    {
+        "up"        => Color.LightGreen,
+        "down"      => Color.LightRed,
+        "healthy"   => Color.LightGreen,
+        "degraded"  => Color.Yellow,
+        "unhealthy" => Color.LightRed,
+        "growling"  => Color.Yellow,
+        _           => Color.LightGray,
+    };
 
     [GeneratedRegex(@"\b(up|down|healthy|degraded|unhealthy|growling)\b")]
     private static partial Regex StatusWordRegex();
+
+    internal readonly record struct LineSegment(string Text, Color? Color = null);
 }

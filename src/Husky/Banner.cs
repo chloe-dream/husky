@@ -1,44 +1,53 @@
-using Spectre.Console;
+using Retro.Crt;
 
 namespace Husky;
 
 internal static class Banner
 {
-    private const string Logo =
-"""
-[aqua]                                      ▆▇▂                   ▁▇▇
-                                    ▆▇██▇▇▂               ▂▇▇██▇▇▁
-                                    ██▃▂▇█▇▇▃           ▂▇▇██▂▂██▁
-                                 ▁▆▆▃▂▁ ▂▂▇█▄           ▂█▇▂▂  ▂▂▆▆▂
-                                  ██▁     ▆█▄ ▄▆▆▆▆▆▆▆▅ ▂█▇      ██▂
-                                  ██▁   ▁ ▂▃▅▆█████████▆▅▃▂      ██▂
-                                  ██▁   ▁ ▄▆▇████████████▆▅      ██▂
-                                  ██▁   ▅▆█████████████████▆▆    ██▂
-                                  ██▁ ▅▅████████▆▃▃▃▅████████▅▅  ██▂
-                                  ██▅▅██████████▄   ▃██████████▅▅██▂
-                                  ██████████▅▄▆█▄   ▃█▇▄▄██████████▂
-                                  ████████▅▄▂ ▃▄▂   ▂▄▃ ▁▄▄████████▂
-                                ▄▄██████▅▄▁               ▁▄▄██████▅▅▁
-                                ██████▅▅▄▄▁ ▃▄▂       ▁▄▃ ▁▄▄▅▅██████▂
-                                ██████▁ ▄▅▄▄▇█▆▄▂   ▁▄▅█▇▃▄▅▅  ██████▂
-                                ████▆▅▁   ▄▅▅▅▅▅▃   ▂▅▅▅▅▅▅    ▅▅████▂
-                               ▁▆▆██▁                            ██▆▆▂
-                                  ██▁                            ██▂
-                                  ██▁         ▁▂▂▂▂▂▂▂▂          ██▂
-                                  ▇▇▃▃▁       ▅███████▆       ▁▂▃▆▇▂
-                                    ▆▇▃▂▂▂▁   ▄▇█████▇▅   ▁▂▂▂▂▇▇▁
-                                      ▆▇▇▇▄▂▁   ▄███▅   ▁▂▃▇▇▇▇
-                                          ▆█▄▂▁ ▃▇▇▇▅ ▁▂▃▇▇
-                                            ▅█▄▂▂▂▂▂▂▂▃█▆
-                                              ▅███████▆[/]
-""";
+    private static readonly string[] Logo =
+    [
+        "                                      ▆▇▂                   ▁▇▇",
+        "                                    ▆▇██▇▇▂               ▂▇▇██▇▇▁",
+        "                                    ██▃▂▇█▇▇▃           ▂▇▇██▂▂██▁",
+        "                                 ▁▆▆▃▂▁ ▂▂▇█▄           ▂█▇▂▂  ▂▂▆▆▂",
+        "                                  ██▁     ▆█▄ ▄▆▆▆▆▆▆▆▅ ▂█▇      ██▂",
+        "                                  ██▁   ▁ ▂▃▅▆█████████▆▅▃▂      ██▂",
+        "                                  ██▁   ▁ ▄▆▇████████████▆▅      ██▂",
+        "                                  ██▁   ▅▆█████████████████▆▆    ██▂",
+        "                                  ██▁ ▅▅████████▆▃▃▃▅████████▅▅  ██▂",
+        "                                  ██▅▅██████████▄   ▃██████████▅▅██▂",
+        "                                  ██████████▅▄▆█▄   ▃█▇▄▄██████████▂",
+        "                                  ████████▅▄▂ ▃▄▂   ▂▄▃ ▁▄▄████████▂",
+        "                                ▄▄██████▅▄▁               ▁▄▄██████▅▅▁",
+        "                                ██████▅▅▄▄▁ ▃▄▂       ▁▄▃ ▁▄▄▅▅██████▂",
+        "                                ██████▁ ▄▅▄▄▇█▆▄▂   ▁▄▅█▇▃▄▅▅  ██████▂",
+        "                                ████▆▅▁   ▄▅▅▅▅▅▃   ▂▅▅▅▅▅▅    ▅▅████▂",
+        "                               ▁▆▆██▁                            ██▆▆▂",
+        "                                  ██▁                            ██▂",
+        "                                  ██▁         ▁▂▂▂▂▂▂▂▂          ██▂",
+        "                                  ▇▇▃▃▁       ▅███████▆       ▁▂▃▆▇▂",
+        "                                    ▆▇▃▂▂▂▁   ▄▇█████▇▅   ▁▂▂▂▂▇▇▁",
+        "                                      ▆▇▇▇▄▂▁   ▄███▅   ▁▂▃▇▇▇▇",
+        "                                          ▆█▄▂▁ ▃▇▇▇▅ ▁▂▃▇▇",
+        "                                            ▅█▄▂▂▂▂▂▂▂▃█▆",
+        "                                              ▅███████▆",
+    ];
 
     public static void Render(string version)
     {
-        AnsiConsole.MarkupLine(Logo);
-        AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine($"  [bold cyan]Husky[/] [dim]v{Markup.Escape(version)}[/]");
-        AnsiConsole.MarkupLine("  [dim]your loyal app launcher[/]");
-        AnsiConsole.WriteLine();
+        using (Crt.WithStyle(fg: Color.LightCyan))
+        {
+            for (var i = 0; i < Logo.Length; i++) Crt.WriteLine(Logo[i]);
+        }
+        Crt.WriteLine();
+
+        Crt.Write("  ");
+        using (Crt.WithStyle(fg: Color.LightCyan, bold: true)) Crt.Write("Husky");
+        Crt.Write(" ");
+        using (Crt.WithStyle(fg: Color.DarkGray)) Crt.Write($"v{version}");
+        Crt.WriteLine();
+
+        using (Crt.WithStyle(fg: Color.DarkGray)) Crt.WriteLine("  your loyal app launcher");
+        Crt.WriteLine();
     }
 }

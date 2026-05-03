@@ -673,8 +673,10 @@ internal sealed record UpdateInfo(
 
 ### 10.1 Library
 
-- **Spectre.Console** (NuGet) for color, markup, progress bars.
-- Cross-platform, ANSI-capable on modern terminals.
+- **[Retro.Crt](https://github.com/chloe-dream/retro-crt)** (NuGet) for color, banner, progress bars, semantic logging.
+- Pascal CRT-Unit-style API. Tiny, dependency-free, trim- and AOT-clean.
+- Cross-platform, ANSI-capable on modern terminals; `NO_COLOR` and Windows
+  legacy console are handled by the library.
 
 ### 10.2 Greeting Banner
 
@@ -719,7 +721,8 @@ These are *suggestions* — the implementer is free to stay in the Husky voice a
 
 ### 10.5 Progress Bars
 
-During download: `Spectre.Console.ProgressContext` with live updates.
+During download: `Retro.Crt.ProgressBar` (single-line, in-place redraw,
+auto-degraded to one final frame when output is redirected).
 
 ```
 14:55:42  husky    fetching... ████████░░░░░░░░░  62%  (4.1/6.6 MB)
@@ -852,7 +855,7 @@ A suggested order for the initial implementation:
 5. **Husky** watchdog: activity tracking, probes, escalation.
 6. **Husky** update flow: phase 1 (download/extract), phase 2 (stop/copy/start).
 7. **Husky** source providers: GitHub, then HTTP.
-8. **Husky** console rendering: Spectre.Console, banner, log format, Husky voice.
+8. **Husky** console rendering: Retro.Crt, banner, log format, Husky voice.
 9. **Husky** crash-restart logic.
 10. End-to-end test: example app + Husky + simulated GitHub release.
 
