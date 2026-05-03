@@ -4,7 +4,7 @@
     <IsPackable>true</IsPackable>
 
     <PackageId>Husky.Client</PackageId>
-    <Version>0.1.1</Version>
+    <Version>0.1.2</Version>
     <Authors>Chloe Dream</Authors>
     <Company>Chloe Dream</Company>
     <Description>Slim client library for apps hosted by the Husky launcher. Drop in three lines, get clean shutdown, health probes, and standalone-mode safety for free.</Description>
@@ -49,7 +49,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Husky.Protocol\Husky.Protocol.csproj" />
+    <!-- PrivateAssets="all" keeps Husky.Protocol out of the .nuspec
+         dependency list — the DLL is bundled into the package via the
+         IncludeReferencedProjectsInPackage target above, so consumers
+         do not need to resolve Husky.Protocol separately from NuGet. -->
+    <ProjectReference Include="..\Husky.Protocol\Husky.Protocol.csproj" PrivateAssets="all" />
   </ItemGroup>
 
 </Project>
