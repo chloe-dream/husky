@@ -1,3 +1,5 @@
+using Husky.Protocol;
+
 namespace Husky;
 
 /// <summary>
@@ -19,6 +21,8 @@ internal sealed class LauncherRuntime(
     private TaskCompletionSource<bool>? updateInFlight;
     private TaskCompletionSource declaredDeadTrigger = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private TaskCompletionSource sessionStartedTrigger = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private UpdateInfo? cachedUpdate;
+    private CancellationToken pollingToken;
 
     public async Task<int> RunAsync(CancellationToken graceful, CancellationToken hardKill)
     {
@@ -98,6 +102,7 @@ internal sealed class LauncherRuntime(
         AnnounceUp(session);
 
         // Polling loop (LEASH §5.3.7).
+        pollingToken = graceful;
         await using UpdateScheduler scheduler = new(
             interval: TimeSpan.FromMinutes(config.CheckMinutes),
             tickAsync: ct => PollOnceAsync(ct));
@@ -256,9 +261,41 @@ internal sealed class LauncherRuntime(
             return;
         }
 
+        // Refresh the per-session cache regardless of whether a new version
+        // was found — apps in manual mode may call update-check at any time.
+        cachedUpdate = update;
+        UpdateAppSessionCache(session, version, update);
+
         if (update is null) return;
 
         ConsoleOutput.Husky($"new version found: v{update.Version}");
+
+        // Manual mode: notify the app and wait for update-now (LEASH §3.5.11).
+        if (IsSessionInManualMode(session))
+        {
+            ConsoleOutput.Husky("manual mode — notifying app, waiting for trigger.");
+            try
+            {
+                await session!.PipeServer.PushUpdateAvailableAsync(
+                    new UpdateAvailablePayload(
+                        CurrentVersion: version,
+                        NewVersion: update.Version,
+                        DownloadSizeBytes: null),
+                    ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) { return; }
+            catch (Exception ex)
+            {
+                ConsoleOutput.Husky($"could not push update-available: {ex.Message}");
+            }
+            return;
+        }
+
+        await TriggerUpdateAsync(update, ct).ConfigureAwait(false);
+    }
+
+    private async Task TriggerUpdateAsync(UpdateInfo update, CancellationToken ct)
+    {
         TaskCompletionSource<bool> mark = StartUpdate();
         try
         {
@@ -268,6 +305,7 @@ internal sealed class LauncherRuntime(
                 startAppAndAwaitHelloAsync: c => RestartAfterUpdateAsync(c),
                 ct: ct).ConfigureAwait(false);
             restartPolicy.Reset();
+            cachedUpdate = null;
             ConsoleOutput.Husky($"update succeeded — now on v{update.Version}");
             mark.TrySetResult(true);
         }
@@ -282,6 +320,42 @@ internal sealed class LauncherRuntime(
             ConsoleOutput.Husky($"update aborted: {ex.Message}");
             mark.TrySetResult(false);
         }
+    }
+
+    private static bool IsSessionInManualMode(AppSession? session) =>
+        session is not null
+        && session.ConnectedApp.SupportsManualUpdates
+        && session.ConnectedApp.UpdateMode == UpdateModes.Manual;
+
+    private static void UpdateAppSessionCache(AppSession? session, string currentVersion, UpdateInfo? update)
+    {
+        if (session is null) return;
+        if (update is null)
+        {
+            session.PipeServer.SetCurrentUpdateStatus(
+                new UpdateStatusPayload(Available: false, CurrentVersion: currentVersion));
+        }
+        else
+        {
+            session.PipeServer.SetCurrentUpdateStatus(
+                new UpdateStatusPayload(
+                    Available: true,
+                    CurrentVersion: currentVersion,
+                    NewVersion: update.Version,
+                    DownloadSizeBytes: null));
+        }
+    }
+
+    private void OnUpdateNowFromApp()
+    {
+        UpdateInfo? snapshot = cachedUpdate;
+        if (snapshot is null)
+        {
+            ConsoleOutput.Husky("update-now received but no update is cached.");
+            return;
+        }
+        ConsoleOutput.Husky($"user triggered update — applying v{snapshot.Version}.");
+        _ = Task.Run(() => TriggerUpdateAsync(snapshot, pollingToken));
     }
 
     private async Task<string> BootstrapAsync(UpdateInfo seed, CancellationToken ct)
@@ -326,6 +400,7 @@ internal sealed class LauncherRuntime(
             declaredDeadTrigger = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         AppSession session = await sessionLauncher.StartAsync(OnSessionDeclaredDead, ct).ConfigureAwait(false);
+        session.PipeServer.OnUpdateNowRequested = OnUpdateNowFromApp;
         SetCurrentSession(session);
         return session;
     }
