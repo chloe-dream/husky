@@ -38,8 +38,18 @@ internal static class AppVersionReader
     private static string? TryFindManagedAssembly(string executablePath)
     {
         string? directory = Path.GetDirectoryName(executablePath);
-        string stem = Path.GetFileNameWithoutExtension(executablePath);
-        if (directory is null || string.IsNullOrEmpty(stem)) return null;
+        if (directory is null) return null;
+
+        string fileName = Path.GetFileName(executablePath);
+        if (string.IsNullOrEmpty(fileName)) return null;
+
+        // The Linux/macOS apphost has no extension and may contain dots in
+        // its name (e.g. "Husky.TestApp"). Path.GetFileNameWithoutExtension
+        // would strip the trailing segment and produce the wrong sibling
+        // name, so handle the two layouts explicitly.
+        string stem = fileName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+            ? fileName[..^4]
+            : fileName;
 
         string candidate = Path.Combine(directory, stem + ".dll");
         return File.Exists(candidate) ? candidate : null;
