@@ -5,6 +5,7 @@ const string ModeNormal = "normal";
 const string ModeSlowShutdown = "slow-shutdown";
 const string ModeWait = "wait";
 const string ModeCrash = "crash";
+const string ModeManualUpdate = "manual-update";
 
 string mode = Environment.GetEnvironmentVariable(ModeEnvVar) ?? ModeNormal;
 
@@ -29,7 +30,11 @@ if (!HuskyClient.IsHosted)
     return 0;
 }
 
-await using HuskyClient client = await HuskyClient.AttachAsync();
+HuskyClientOptions clientOptions = mode == ModeManualUpdate
+    ? HuskyClientOptions.Default with { UpdateMode = HuskyUpdateMode.Manual }
+    : HuskyClientOptions.Default;
+
+await using HuskyClient client = await HuskyClient.AttachAsync(clientOptions);
 
 if (mode == ModeCrash)
 {
@@ -49,6 +54,25 @@ switch (mode)
             Console.Out.WriteLine("testapp: slow-shutdown handler entered — sleeping.");
             Console.Out.Flush();
             await Task.Delay(TimeSpan.FromMinutes(10), CancellationToken.None);
+        });
+        break;
+
+    case ModeManualUpdate:
+        // Subscribe to update-available; on the first push, log a marker and
+        // immediately call RequestUpdateAsync to trigger the launcher's update
+        // flow. This exercises the LEASH §3.5.11 / §3.5.12 round-trip.
+        client.UpdateAvailable += (_, info) =>
+        {
+            Console.Out.WriteLine(
+                $"testapp: update-available received (current={info.CurrentVersion} new={info.NewVersion}) — triggering update.");
+            Console.Out.Flush();
+            _ = client.RequestUpdateAsync();
+        };
+        client.OnShutdown((reason, _) =>
+        {
+            Console.Out.WriteLine($"testapp: shutdown received (reason={reason}).");
+            Console.Out.Flush();
+            return Task.CompletedTask;
         });
         break;
 
