@@ -158,7 +158,7 @@ Every message has:
 
 #### 3.5.1 `hello` — App → Launcher
 
-First message after pipe connect. App sends its identity.
+First message after pipe connect. App sends its identity, declares its capabilities, and states its initial preferences.
 
 ```json
 {
@@ -168,14 +168,25 @@ First message after pipe connect. App sends its identity.
     "protocolVersion": 1,
     "appVersion": "1.4.2",
     "appName": "umbrella-bot",
-    "pid": 4218
+    "pid": 4218,
+    "capabilities": ["manual-updates", "shutdown-progress"],
+    "preferences": {
+      "updateMode": "manual"
+    }
   }
 }
 ```
 
+- `capabilities`: array of feature tokens (kebab-case strings) declaring which optional wire features the app speaks. The launcher uses this to decide which messages are safe to send to this app. **The baseline** (`hello`/`welcome`/`heartbeat`/`ping`/`pong`/`shutdown`/`shutdown-ack`) is always supported and need not be listed. Tokens defined for v1.0:
+  - `manual-updates` — app speaks the `update-check` / `update-status` / `update-available` / `update-now` / `set-update-mode` family (§3.5.9–14). Required for the launcher to honour any non-default `updateMode` preference and to push `update-available`. Apps without this capability get auto-mode regardless.
+  - `shutdown-progress` — app may emit `shutdown-progress` messages during cleanup. Purely informational on the launcher side.
+  Future protocol additions add new tokens; unknown tokens are ignored by older launchers.
+- `preferences`: optional block of runtime settings the app would like to start with. Ignored fields fall back to defaults. Currently:
+  - `updateMode`: `"auto"` (default — launcher applies updates as soon as polling discovers them) or `"manual"` (launcher only notifies the app and waits for `update-now`). Honoured only if the app declared `manual-updates` in `capabilities`. Can be changed at runtime via `set-update-mode` (§3.5.13) — useful for apps like Fishbowl that expose an "automatic updates" toggle in their own settings UI.
+
 #### 3.5.2 `welcome` — Launcher → App
 
-Reply to `hello`. Confirms acceptance.
+Reply to `hello`. Confirms acceptance and echoes the launcher's own capabilities.
 
 ```json
 {
@@ -186,12 +197,14 @@ Reply to `hello`. Confirms acceptance.
     "protocolVersion": 1,
     "launcherVersion": "1.0.0",
     "accepted": true,
-    "reason": null
+    "reason": null,
+    "capabilities": ["manual-updates", "shutdown-progress"]
   }
 }
 ```
 
-If `accepted: false`: `reason` contains plain-text explanation; the app should exit.
+- `capabilities`: feature tokens the launcher supports, in the same vocabulary as `hello.capabilities`. The effective feature set for the session is the intersection of the two lists. Apps use this to gate UI: if the launcher does not advertise `manual-updates`, an "Update now" button stays hidden.
+- If `accepted: false`: `reason` contains plain-text explanation; the app should exit.
 
 #### 3.5.3 `heartbeat` — App → Launcher
 
@@ -267,6 +280,97 @@ During cleanup, the app may optionally report progress.
 }
 ```
 
+#### 3.5.9 `update-check` — App → Launcher
+
+Asks the launcher whether an update is available right now. Reply expected. The launcher answers from its in-memory cache (last polling result); it does not trigger a fresh poll on demand.
+
+```json
+{ "id": "...", "type": "update-check" }
+```
+
+#### 3.5.10 `update-status` — Launcher → App
+
+Reply to `update-check`.
+
+```json
+{
+  "id": "...",
+  "replyTo": "...",
+  "type": "update-status",
+  "data": {
+    "available": true,
+    "currentVersion": "1.4.2",
+    "newVersion": "1.4.3",
+    "downloadSizeBytes": 6918432
+  }
+}
+```
+
+- `available`: `true` if a newer version is known, `false` otherwise.
+- `newVersion` and `downloadSizeBytes` are `null` when `available: false`.
+- `downloadSizeBytes` is `null` when the source provider does not expose a size (e.g. some HTTP manifests).
+
+#### 3.5.11 `update-available` — Launcher → App
+
+Sent unsolicited, once per discovered version, when the polling loop finds a new version **and** the current update mode is `manual`. In `auto` mode the launcher proceeds straight to the update flow (§7) and never sends this push. No reply expected.
+
+```json
+{
+  "type": "update-available",
+  "data": {
+    "currentVersion": "1.4.2",
+    "newVersion": "1.4.3",
+    "downloadSizeBytes": 6918432
+  }
+}
+```
+
+#### 3.5.12 `update-now` — App → Launcher
+
+Requests the launcher to apply a known update immediately. Fire-and-forget; no reply. The launcher checks its cache and:
+
+- if an update is available → starts the update flow (§7), which itself sends `shutdown` with `reason: "update"` to the app.
+- if no update is available → logs a warning and ignores the request.
+
+```json
+{ "type": "update-now" }
+```
+
+Used by `manual` mode apps in response to a UI button click. `auto` mode apps may also use it (e.g. an "update now" button that bypasses the next polling tick), with the same semantics.
+
+#### 3.5.13 `set-update-mode` — App → Launcher
+
+Changes the current update mode at runtime. Reply expected (`update-mode-ack`) so the app can confirm the launcher accepted the change before updating its UI. The mode persists for the lifetime of the launcher process; on launcher restart, the app's next `hello` re-establishes the desired mode.
+
+```json
+{
+  "id": "...",
+  "type": "set-update-mode",
+  "data": { "mode": "manual" }
+}
+```
+
+- `mode`: `"auto"` | `"manual"`.
+
+If the new mode is `auto` and the launcher already has a cached pending update, it proceeds to apply it on the next polling tick (or immediately, implementation choice — be consistent with the auto-mode polling behavior).
+
+**Capability gating:** the launcher only honours mode changes from apps that declared the `manual-updates` capability in `hello`. If the capability was not declared, the launcher logs a console warning and replies with `update-mode-ack` carrying the unchanged effective mode (always `"auto"` for such apps). Same rule for the initial `preferences.updateMode` in `hello` — ignored if the capability is missing.
+
+#### 3.5.14 `update-mode-ack` — Launcher → App
+
+Reply to `set-update-mode`.
+
+```json
+{
+  "id": "...",
+  "replyTo": "...",
+  "type": "update-mode-ack",
+  "data": { "mode": "manual" }
+}
+```
+
+`mode` echoes the now-active mode.
+
 ### 3.6 Versioning
 
 - `protocolVersion` is an integer.
@@ -298,21 +402,61 @@ public sealed class HuskyClient : IAsyncDisposable
 
     // Returns null if not hosted; otherwise performs the full async attach
     // (pipe connect + hello/welcome handshake + background loops).
-    public static Task<HuskyClient?> AttachIfHostedAsync(CancellationToken ct = default);
+    public static Task<HuskyClient?> AttachIfHostedAsync(
+        HuskyClientOptions? options = null,
+        CancellationToken ct = default);
 
     // Throws if not hosted. For callers that require Husky to be present.
-    public static Task<HuskyClient> AttachAsync(CancellationToken ct = default);
+    public static Task<HuskyClient> AttachAsync(
+        HuskyClientOptions? options = null,
+        CancellationToken ct = default);
 
     public CancellationToken ShutdownToken { get; }
 
     public string? AppName { get; }
 
+    public HuskyUpdateMode UpdateMode { get; }
+
     public void OnShutdown(Func<ShutdownReason, CancellationToken, Task> handler);
 
     public void SetHealth(Func<HealthStatus> provider);
 
+    // --- Update protocol ---
+
+    // Asks the launcher whether an update is currently known. Returns null if no
+    // update is available. Cheap call; the launcher answers from its cache.
+    public Task<HuskyUpdateInfo?> CheckForUpdateAsync(CancellationToken ct = default);
+
+    // Tells the launcher to apply the known update now. The launcher will follow
+    // up with a `shutdown` (reason: Update) — the app's OnShutdown handler runs
+    // exactly as for an auto-mode update. Fire-and-forget on the wire; this Task
+    // completes once the message has been sent.
+    public Task RequestUpdateAsync(CancellationToken ct = default);
+
+    // Switches between auto and manual at runtime. Awaits the launcher's ack.
+    public Task SetUpdateModeAsync(HuskyUpdateMode mode, CancellationToken ct = default);
+
+    // Raised when the launcher pushes `update-available` (manual mode only).
+    public event EventHandler<HuskyUpdateInfo>? UpdateAvailable;
+
     public ValueTask DisposeAsync();
 }
+
+public sealed record HuskyClientOptions
+{
+    // Initial mode sent in `hello`. Default Auto preserves pre-update-protocol
+    // behavior. Apps with their own "automatic updates" toggle should pass the
+    // user's last-saved choice here on attach.
+    public HuskyUpdateMode UpdateMode { get; init; } = HuskyUpdateMode.Auto;
+}
+
+public enum HuskyUpdateMode { Auto, Manual }
+
+public sealed record HuskyUpdateInfo(
+    string CurrentVersion,
+    string NewVersion,
+    long? DownloadSizeBytes
+);
 
 public enum ShutdownReason { Update, Manual, LauncherStopping }
 
@@ -335,7 +479,9 @@ namespace Husky.Client.DependencyInjection;
 
 public static class HuskyServiceCollectionExtensions
 {
-    public static IServiceCollection AddHuskyClient(this IServiceCollection services);
+    public static IServiceCollection AddHuskyClient(
+        this IServiceCollection services,
+        Action<HuskyClientOptions>? configure = null);
 }
 ```
 
@@ -343,12 +489,13 @@ public static class HuskyServiceCollectionExtensions
 - On `shutdown`: calls `IHostApplicationLifetime.StopApplication()` — the host runs its `IHostedService.StopAsync` routines cleanly.
 - On `ping`: by default uses `HealthCheckService` if registered via `AddHealthChecks()`, otherwise default `Healthy`.
 - The app code does not need to do anything else.
+- For runtime control of update mode and manual triggers, the app injects `HuskyClient` and calls `CheckForUpdateAsync` / `RequestUpdateAsync` / `SetUpdateModeAsync` directly.
 
 ### 4.3 Lifecycle
 
 1. `AttachIfHostedAsync()` checks `Environment.GetEnvironmentVariable("HUSKY_PIPE")`. If unset → returns `null`. (`AttachAsync()` throws in this case.)
 2. If set: opens `NamedPipeClientStream` with the name, connects (timeout: 5s).
-3. Sends `hello` with app metadata.
+3. Sends `hello` with app metadata, including the `updateMode` from `HuskyClientOptions`.
 4. Awaits `welcome` (timeout: 5s). If `accepted: false` → throws; the app author decides what to do.
 5. Starts two background tasks:
    - **Sender loop**: every 5s send `heartbeat`.
@@ -361,7 +508,12 @@ public static class HuskyServiceCollectionExtensions
 7. On incoming `ping`:
    - Calls the `SetHealth` provider (or default `Healthy` if not set).
    - Sends `pong` with the status.
-8. On `DisposeAsync`: cleanly closes the pipe.
+8. On incoming `update-available`:
+   - Raises the `UpdateAvailable` event with the parsed `HuskyUpdateInfo`.
+9. `CheckForUpdateAsync` sends `update-check` with a fresh correlation `id`, awaits the matching `update-status`, returns `null` if `available: false` or the `HuskyUpdateInfo` otherwise.
+10. `RequestUpdateAsync` sends `update-now`. The Task completes when the message is on the wire — the actual shutdown follows asynchronously via the normal shutdown handler.
+11. `SetUpdateModeAsync` sends `set-update-mode`, awaits `update-mode-ack`, then updates the cached `UpdateMode` property.
+12. On `DisposeAsync`: cleanly closes the pipe.
 
 ### 4.4 Robustness
 
@@ -395,22 +547,28 @@ The executable launcher binary.
 8. Crash-restart logic.
 9. Render the console UI.
 
-### 5.2 Configuration File
+### 5.2 Configuration
 
-Path: `husky.config.json` in the same directory as `Husky.exe`.
+Husky operates against an **effective config** assembled at runtime from three layers, in this precedence order (higher wins):
 
-**Schema:**
+1. **Local `husky.config.json`** — file in the same directory as `Husky.exe`. The user's view: must always contain `source`, may carry overrides for any other field.
+2. **Source-supplied config** — fetched from the configured source on every successful update poll (HTTP manifest's `config` block §9.3, or a `husky.config.json` from a GitHub release asset / repo root §9.2). The app author's view: deployment metadata for their own app.
+3. **Defaults** — built-in fallbacks for the timing knobs.
+
+The merge is field-by-field: a non-null value at a higher layer fills the slot; otherwise the next layer is consulted; otherwise the default applies. The local config can be as small as `{ "source": { ... } }` when the source supplies everything else.
+
+**Schema** — same fields apply to both the local file and the source-supplied block (which has no `source`):
 
 ```json
 {
-  "name": "umbrella-bot",
-  "executable": "app/UmbrellaBot.exe",
-
   "source": {
     "type": "github",
     "repo": "chloe/umbrella-bot",
     "asset": "UmbrellaBot-{version}.zip"
   },
+
+  "name": "umbrella-bot",
+  "executable": "app/UmbrellaBot.exe",
 
   "checkMinutes": 60,
   "shutdownTimeoutSec": 60,
@@ -420,39 +578,59 @@ Path: `husky.config.json` in the same directory as `Husky.exe`.
 }
 ```
 
-**Fields:**
+**Field reference:**
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `name` | string | ✓ | Display name; appears in console and pipe naming. |
-| `executable` | string | ✓ | Relative path to the app executable (relative to the `Husky.exe` directory). |
-| `source` | object | ✓ | Update-source configuration; see §9. |
-| `checkMinutes` | int | – | Polling interval for update checks. Default: `60`. Min: `5`. |
-| `shutdownTimeoutSec` | int | – | How long the launcher waits for graceful shutdown. Default: `60`. |
-| `killAfterSec` | int | – | Additional grace period after the timeout before hard-kill. Default: `10`. |
-| `restartAttempts` | int | – | Crash restarts allowed per rolling hour. Default: `3`. |
-| `restartPauseSec` | int | – | Pause between crash restarts. Default: `30`. |
+| Field | Type | Layers that may set it | Required (effective) | Default |
+|-------|------|------------------------|----------------------|---------|
+| `source` | object | local only — *never* read from source-supplied (anti-redirect) | ✓ | — |
+| `name` | string | local, source-supplied | ✓ | — |
+| `executable` | string | local, source-supplied | ✓ | — |
+| `checkMinutes` | int (≥ 5) | local, source-supplied | – | `60` |
+| `shutdownTimeoutSec` | int | local, source-supplied | – | `60` |
+| `killAfterSec` | int | local, source-supplied | – | `10` |
+| `restartAttempts` | int | local, source-supplied | – | `3` |
+| `restartPauseSec` | int | local, source-supplied | – | `30` |
 
-**Validation:**
+`name` is used for console display and is passed to the app via the `HUSKY_APP_NAME` environment variable. It is **not** part of the pipe name — pipe names are GUID-based (§3.1).
 
-- Missing required fields: launcher exits with a clear console message and exit code `2`.
-- Invalid JSON: exit code `2`.
-- Executable not found: launcher attempts a **bootstrap update** via the configured source (§7.5). Only if the bootstrap fails does the launcher exit with code `2`.
+`executable` is a path **relative to the launcher's directory**. Forward slashes only; backslashes are normalized. Absolute paths and `..` traversal are rejected (exit code `2`).
+
+**Refresh semantics:**
+
+- Local config is read **once at startup**. Edits while Husky runs are not picked up — restart Husky to reload.
+- Source-supplied config is **re-read on every successful poll**. Changes to launcher-internal knobs (`checkMinutes`, `restartAttempts`, …) take effect immediately. Changes to fields that affect the app process (`name`, `executable`) are applied the next time the app is started or restarted — never mid-run.
+- The `source` block itself never changes mid-run; it is locked in from the local file at startup.
+
+**Validation and failure modes:**
+
+| Situation | Behavior |
+|-----------|----------|
+| Local file missing, unparseable, or `source` malformed | exit code `2`, clear console message |
+| `name` / `executable` unresolved after merge, source poll succeeded | exit code `2` (app author omitted them — they belong in source-supplied config) |
+| `name` / `executable` unresolved after merge, source poll failed | exit code `2`, message: "config incomplete and source unreachable, retry once network is back" |
+| `name` / `executable` resolved from local config, source poll failed | console warning, continue, retry on the next polling tick |
+| `executable` resolved but file not on disk | enter **bootstrap mode** (§7.5) — bootstrap then installs the app |
+| Source-supplied block contains `source` (would be a redirect) | the field is dropped from the merge with a console warning, so the app author can spot and fix |
+| Source-supplied block contains unknown fields | silently ignored — supports forward-compatible additions in future Husky versions |
+
+App authors who ship via Husky should always put `name` and `executable` in their source-supplied config so their users can write a local config containing only `source`.
 
 ### 5.3 Boot Sequence
 
 1. Render the Husky ASCII logo + tagline.
-2. Load and validate the config.
-3. Determine the current app version:
-   - If the executable exists: read from `FileVersionInfo.GetVersionInfo(executable).FileVersion`.
-   - If the executable does **not** exist: enter **bootstrap mode** — treat the current version as `"0.0.0"` so any source version triggers an update.
-4. Initialize the source provider based on `source.type`.
-5. Initial update check (always on at startup):
-   - **Bootstrap mode**: run the bootstrap update flow (§7.5). On failure: exit code `2`.
-   - Otherwise, if a new version is available → run the update flow (§7), then start the app afterwards.
+2. Load and validate the **local** `husky.config.json`. Must contain `source`. On failure: exit code `2`.
+3. Initialize the source provider based on `source.type`.
+4. **Initial source poll** — fetch the latest `UpdateInfo`, which may carry a source-supplied config block. On network/parse failure: console warning; remember that the poll failed for the resolution step below.
+5. **Resolve the effective config** — merge local + source-supplied + defaults per §5.2. If `name` or `executable` ends up unresolved: exit code `2` (with the appropriate message depending on whether the source poll succeeded).
+6. Determine the current app version using the resolved `executable`:
+   - File exists → read `FileVersionInfo.GetVersionInfo(executable).FileVersion`.
+   - File does **not** exist → enter **bootstrap mode**: treat the current version as `"0.0.0"` so any source version triggers an install.
+7. Decide what to do based on the source poll result and the current vs. source version comparison:
+   - **Bootstrap mode** → run the bootstrap update flow (§7.5). On failure: exit code `2`.
+   - New version available → run the update flow (§7), then start the app afterwards.
    - Otherwise → start the app (§5.4).
-6. Start the watchdog loop.
-7. Start the update-polling timer (`checkMinutes`).
+8. Start the watchdog loop.
+9. Start the update-polling timer (`checkMinutes`).
 
 ### 5.4 App Start
 
@@ -514,10 +692,21 @@ Path: `husky.config.json` in the same directory as `Husky.exe`.
 
 ## 7. Update Flow in Detail
 
-### 7.1 Pre-Conditions
+### 7.1 Triggers
 
-- The source provider has reported a new version (§9).
-- The app is currently running.
+The launcher polls the source on its own schedule (`checkMinutes`). What happens when polling discovers a new version depends on the **current update mode**, which is initially set in `hello` and may be changed at runtime via `set-update-mode` (§3.5.13).
+
+The flow can start in any of these situations:
+
+1. **Polling discovery, mode = `auto`** (default). The launcher proceeds straight to Phase 1.
+2. **Polling discovery, mode = `manual`**. The launcher caches the `UpdateInfo` in memory, sends `update-available` to the app, then waits. No download happens until the app says go.
+3. **`update-now` from the app**. The launcher checks its cache:
+   - cache populated → proceed to Phase 1.
+   - cache empty → log a warning and ignore (the app should call `update-check` first, or wait for the next polling tick).
+4. **Mode switched from `manual` to `auto` while a cached update exists**. The launcher proceeds to Phase 1 on the next polling tick.
+5. **Bootstrap** (§7.5). The launcher starts with no app installed; mode is irrelevant — it runs Phase 1 immediately.
+
+In cases 1–4 the app is currently running. In case 5 it is not.
 
 ### 7.2 Phase 1 — Preparation (App Keeps Running)
 
@@ -544,8 +733,8 @@ Path: `husky.config.json` in the same directory as `Husky.exe`.
 
 ### 7.4 Concurrent Updates
 
-- While an update is in progress, further update checks are paused.
-- No manual triggers in v1 (no user interface).
+- While an update is in progress (Phase 1 or Phase 2), further polling is paused and any incoming `update-now` messages are ignored with a console log.
+- The launcher caches at most one pending `UpdateInfo` at a time. If polling discovers a newer version while a previous one is still cached (manual mode, app hasn't pulled the trigger yet), the cache is overwritten with the newer version and a new `update-available` push is sent.
 
 ### 7.5 Bootstrap Update
 
@@ -606,9 +795,22 @@ internal interface IUpdateSource
 internal sealed record UpdateInfo(
     string Version,
     Uri DownloadUrl,
-    string? Sha256
+    string? Sha256,
+    SourceSuppliedConfig? Config
+);
+
+internal sealed record SourceSuppliedConfig(
+    string? Name,
+    string? Executable,
+    int? CheckMinutes,
+    int? ShutdownTimeoutSec,
+    int? KillAfterSec,
+    int? RestartAttempts,
+    int? RestartPauseSec
 );
 ```
+
+`SourceSuppliedConfig` carries optional config fields that the source can supply on the app author's behalf — see §5.2 Config resolution.
 
 ### 9.2 GitHub Provider
 
@@ -622,6 +824,8 @@ internal sealed record UpdateInfo(
 }
 ```
 
+`asset` is optional; if omitted, the provider picks the first asset whose name ends with `.zip`.
+
 **Behavior:**
 
 - Call: `GET https://api.github.com/repos/{repo}/releases/latest`.
@@ -632,6 +836,15 @@ internal sealed record UpdateInfo(
 - `Sha256` is `null` (GitHub does not provide a hash by default — a future provider could fetch the digest via the assets API; skip in v1).
 - Version comparison: SemVer-based.
 - If the new version > current version: return `UpdateInfo`, otherwise `null`.
+
+**Source-supplied config:**
+
+The provider also looks for a `husky.config.json` to populate `UpdateInfo.Config`:
+
+1. First, check if the release has an asset literally named `husky.config.json` — if so, fetch and parse.
+2. Otherwise, fetch `husky.config.json` from the repo's default branch root: `GET https://raw.githubusercontent.com/{repo}/HEAD/husky.config.json`. 404 is fine — just means no source-supplied config.
+
+The `source` block of any source-supplied config is dropped with a console warning (the user's local `source` always wins; otherwise apps could redirect themselves elsewhere). Only the deployment-metadata fields are accepted.
 
 ### 9.3 HTTP Provider
 
@@ -650,15 +863,23 @@ internal sealed record UpdateInfo(
 {
   "version": "1.4.3",
   "url": "https://chloe.neocities.org/x7k3p2-9f4q/umbrella/UmbrellaBot-1.4.3.zip",
-  "sha256": "9b74c9897bac770ffc029102a200c5de"
+  "sha256": "9b74c9897bac770ffc029102a200c5de",
+  "config": {
+    "name": "umbrella-bot",
+    "executable": "app/UmbrellaBot.exe",
+    "checkMinutes": 30,
+    "shutdownTimeoutSec": 60
+  }
 }
 ```
+
+`version`, `url` are required. `sha256` is optional but strongly recommended. `config` is optional and carries the deployment-metadata fields (§5.2) that the launcher should use unless the local config overrides them. The `source` block is intentionally not allowed in `config` — see §9.2.
 
 **Behavior:**
 
 - Call: `GET <manifest-url>`.
 - User-Agent header: `Husky/{version}`.
-- Parse the JSON, map fields directly to `UpdateInfo`.
+- Parse the JSON, map `version`/`url`/`sha256` to `UpdateInfo` and the `config` block to `UpdateInfo.Config`.
 - Version comparison: identical to GitHub.
 - Auth: none. Security via non-public, hard-to-guess URLs ("security through obscurity" — explicitly accepted for non-public use).
 
@@ -815,7 +1036,6 @@ Output: a single binary `Husky.exe` (Windows) or `Husky` (Linux).
 
 Explicitly *not* in v1.0 — possible candidates for later:
 
-- **App-initiated update trigger** (`request-update` message) for UI apps like Fishbowl that want a "Update now" button.
 - **Update channels** (stable / beta / nightly).
 - **Code signing** and Authenticode verification.
 - **Self-update** of the launcher itself (via a bootstrap binary).
@@ -824,8 +1044,28 @@ Explicitly *not* in v1.0 — possible candidates for later:
 - **Rollback** to a previous version.
 - **GUI / tray icon**.
 - **Structured `log` message type** over the pipe — stdout is enough.
-- **Capabilities negotiation** in hello — the library handles silent defaults if something is unimplemented.
 - **Plugin architecture** for source providers.
+- **Husky packaging helpers** — see Future Ideas below.
+
+---
+
+## Future Ideas
+
+Not specified, not committed — sketches for later, when v1.0 is in the wild and we know what's worth building.
+
+### Distribution helpers — getting Husky to users without friction
+
+v1.0 covers the protocol, the capability handshake, and config layering (local + source-supplied + defaults — see §5.2). What v1.0 does **not** cover is the user-facing distribution story: how does someone without prior Husky knowledge actually run an app like Fishbowl? Sketches for later, all additive on top of the v1.0 layering:
+
+- **CLI args.** Flags that build (or override) the config on the fly: `husky --repo X --asset 'Y-{v}.zip' --exec Z.exe`. New top-priority layer above the local file. Cheap to add post-v1.0 because the merge plumbing already exists; the only new code is flag parsing.
+- **Slug invocation.** `husky chloe-dream/the-fishbowl`. The slug is the source — Husky points at GitHub, pulls the latest release's `husky.config.json` (already a v1.0 mechanism via §9.2), runs. No local file, no flags. Most natural once Husky is on PATH.
+- **Global install story.** winget / brew / install.sh / scoop. Makes slug invocation natural — install Husky once, then any Husky-ready app is one command. Always parallel to portable bundled-binary deployments, never mandatory.
+- **`husky init` subcommand.** Guided Claude-Code-style prompt sequence (4-5 questions) that writes a `husky.config.json`. For app authors committing one to their repo, or users authoring a local override. Sequential prompts only — no TUI forms (Retro.Crt forms layer is explicitly *not* a prerequisite).
+- **`husky-package` GitHub Action.** Reusable Action that drops into a release workflow, produces a ZIP with `Husky.exe` (correct RID) + generated `husky.config.json` as a release asset. The natural deployment artifact for app authors who want a one-file download for their users.
+
+A hosted registry service (`husky register name --repo ...`) and a web-form config generator were both considered and explicitly rejected: the registry is a forever-hosting commitment unfit for an indie tool; the web form is marketing without an audience.
+
+Status: parking lot. Pick whichever matches the deployment shape we actually need once v1.0 is being used.
 
 ---
 
@@ -841,6 +1081,9 @@ Explicitly *not* in v1.0 — possible candidates for later:
 | **Strike** | A failed health probe. |
 | **Cutover** | The brief moment during an update when the app is down. |
 | **Standalone mode** | App runs without Husky (e.g. in the debugger). The library detects this and no-ops. |
+| **Update mode** | Per-launcher-process setting: `auto` (apply on discovery) or `manual` (notify and wait for `update-now`). Initial value comes from `hello.preferences`; can be changed at runtime. |
+| **Capability** | A feature token declared in `hello.capabilities` / `welcome.capabilities`. Replaces static config knobs for "does this app speak feature X?". |
+| **Source-supplied config** | Deployment metadata (`name`, `executable`, timing knobs) provided by the source (HTTP manifest's `config` block, or a `husky.config.json` in a GitHub release/repo). Lets the local config shrink to just `{ "source": ... }`. |
 
 ---
 
@@ -851,13 +1094,16 @@ A suggested order for the initial implementation:
 1. Create the solution and project structure.
 2. **Husky.Protocol**: records, JSON serialization, pipe-naming constants, tests.
 3. **Husky.Client**: connect/hello/heartbeat, shutdown handler, `IsHosted` / `AttachIfHosted`. Tests with a mock pipe server.
-4. **Husky** skeleton: config loading, process start/stop, stdout piping, pipe server, hello handler.
+4. **Husky** skeleton: local-only config loading (defer the source poll and merge to step 12), process start/stop, stdout piping, pipe server, hello handler.
 5. **Husky** watchdog: activity tracking, probes, escalation.
-6. **Husky** update flow: phase 1 (download/extract), phase 2 (stop/copy/start).
+6. **Husky** update flow: phase 1 (download/extract), phase 2 (stop/copy/start) — auto-mode trigger only.
 7. **Husky** source providers: GitHub, then HTTP.
 8. **Husky** console rendering: Retro.Crt, banner, log format, Husky voice.
 9. **Husky** crash-restart logic.
-10. End-to-end test: example app + Husky + simulated GitHub release.
+10. **Capabilities & preferences** in `hello`/`welcome`: emit and consume `capabilities` arrays on both sides; thread the intersection through dispatch so unsupported messages are never sent and unsolicited optional pushes are gated.
+11. **Update protocol** end-to-end: `update-check` / `update-status` / `update-available` / `update-now` / `set-update-mode` on both sides, gated by the `manual-updates` capability; `updateMode` preference in `hello`; manual-mode trigger path in §7.1; client API surface (`CheckForUpdateAsync`, `RequestUpdateAsync`, `SetUpdateModeAsync`, `UpdateAvailable` event).
+12. **Source-supplied config**: extend `UpdateInfo` with a `Config` block; populate it in the GitHub provider (release-asset and repo-root lookup) and the HTTP provider (`config` field in manifest); switch the boot sequence (§5.3) to do the initial source poll *before* config resolution; implement the merge per §5.2 precedence rules; verify the case where the local file contains only `{ "source": ... }`.
+13. End-to-end test: example app + Husky + simulated GitHub release, exercising both auto and manual modes, a runtime mode switch, and a release whose deployment metadata comes entirely from a `husky.config.json` asset (local config is just `{ "source": ... }`).
 
 ---
 
