@@ -33,6 +33,99 @@ public sealed class AppPipeServerTests
     }
 
     [Fact]
+    public async Task Welcome_advertises_launcher_capabilities_on_accepted_handshake()
+    {
+        await using LauncherPipeHarness h = await LauncherPipeHarness.CreateConnectedAsync();
+
+        Task accept = h.Server.AcceptAndHandshakeAsync(TimeSpan.FromSeconds(5));
+
+        await SendHelloAsync(h.ClientWriter, "test-app", "1.0.0", 1);
+
+        MessageEnvelope welcome = await ReadAsync(h.ClientReader);
+        WelcomePayload payload = welcome.Data!.Value.Deserialize(HuskyJsonContext.Default.WelcomePayload)!;
+
+        Assert.NotNull(payload.Capabilities);
+        Assert.Contains(Capabilities.ManualUpdates, payload.Capabilities!);
+        Assert.Contains(Capabilities.ShutdownProgress, payload.Capabilities!);
+
+        await accept;
+    }
+
+    [Fact]
+    public async Task Welcome_omits_capabilities_when_handshake_is_rejected()
+    {
+        await using LauncherPipeHarness h = await LauncherPipeHarness.CreateConnectedAsync();
+
+        Task accept = h.Server.AcceptAndHandshakeAsync(TimeSpan.FromSeconds(5));
+
+        await SendHelloAsync(
+            h.ClientWriter, "test-app", "1.0.0", 1, protocolVersion: ProtocolVersion.Current + 1);
+
+        MessageEnvelope welcome = await ReadAsync(h.ClientReader);
+        WelcomePayload payload = welcome.Data!.Value.Deserialize(HuskyJsonContext.Default.WelcomePayload)!;
+
+        Assert.False(payload.Accepted);
+        Assert.Null(payload.Capabilities);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () => await accept);
+    }
+
+    [Fact]
+    public async Task ConnectedApp_records_app_declared_capabilities_and_initial_mode()
+    {
+        await using LauncherPipeHarness h = await LauncherPipeHarness.CreateConnectedAsync();
+
+        Task accept = h.Server.AcceptAndHandshakeAsync(TimeSpan.FromSeconds(5));
+
+        await SendHelloAsync(
+            h.ClientWriter, "test-app", "1.0.0", 1,
+            capabilities: [Capabilities.ManualUpdates],
+            preferences: new HelloPreferences(UpdateMode: UpdateModes.Manual));
+
+        await ReadAsync(h.ClientReader); // welcome
+        await accept;
+
+        Assert.True(h.Server.ConnectedApp!.SupportsManualUpdates);
+        Assert.Equal(UpdateModes.Manual, h.Server.ConnectedApp.UpdateMode);
+    }
+
+    [Fact]
+    public async Task ConnectedApp_falls_back_to_auto_when_app_lacks_manual_updates_capability()
+    {
+        // LEASH §3.5.13 capability gating: a manual mode preference is ignored
+        // when the app did not declare manual-updates.
+        await using LauncherPipeHarness h = await LauncherPipeHarness.CreateConnectedAsync();
+
+        Task accept = h.Server.AcceptAndHandshakeAsync(TimeSpan.FromSeconds(5));
+
+        await SendHelloAsync(
+            h.ClientWriter, "test-app", "1.0.0", 1,
+            capabilities: [],
+            preferences: new HelloPreferences(UpdateMode: UpdateModes.Manual));
+
+        await ReadAsync(h.ClientReader); // welcome
+        await accept;
+
+        Assert.False(h.Server.ConnectedApp!.SupportsManualUpdates);
+        Assert.Equal(UpdateModes.Auto, h.Server.ConnectedApp.UpdateMode);
+    }
+
+    [Fact]
+    public async Task ConnectedApp_defaults_to_auto_when_no_preferences_supplied()
+    {
+        await using LauncherPipeHarness h = await LauncherPipeHarness.CreateConnectedAsync();
+
+        Task accept = h.Server.AcceptAndHandshakeAsync(TimeSpan.FromSeconds(5));
+
+        await SendHelloAsync(h.ClientWriter, "test-app", "1.0.0", 1);
+
+        await ReadAsync(h.ClientReader); // welcome
+        await accept;
+
+        Assert.Equal(UpdateModes.Auto, h.Server.ConnectedApp!.UpdateMode);
+    }
+
+    [Fact]
     public async Task Welcome_replyTo_matches_hello_id()
     {
         await using LauncherPipeHarness h = await LauncherPipeHarness.CreateConnectedAsync();
@@ -389,13 +482,17 @@ public sealed class AppPipeServerTests
         string appName,
         string appVersion,
         int pid,
-        int? protocolVersion = null)
+        int? protocolVersion = null,
+        IReadOnlyList<string>? capabilities = null,
+        HelloPreferences? preferences = null)
     {
         HelloPayload payload = new(
             ProtocolVersion: protocolVersion ?? ProtocolVersion.Current,
             AppVersion: appVersion,
             AppName: appName,
-            Pid: pid);
+            Pid: pid,
+            Capabilities: capabilities,
+            Preferences: preferences);
 
         JsonElement data = JsonSerializer.SerializeToElement(payload, HuskyJsonContext.Default.HelloPayload);
         string id = Guid.NewGuid().ToString("D");

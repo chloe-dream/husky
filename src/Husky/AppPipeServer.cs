@@ -75,8 +75,32 @@ internal sealed class AppPipeServer : IAsyncDisposable
 
         await SendWelcomeAsync(helloEnvelope.Id, accepted: true, reason: null, ct).ConfigureAwait(false);
 
-        ConnectedApp = new ConnectedApp(hello.AppName, hello.AppVersion, hello.Pid);
+        IReadOnlyList<string> appCapabilities = hello.Capabilities ?? [];
+        string effectiveMode = ResolveInitialUpdateMode(appCapabilities, hello.Preferences);
+
+        ConnectedApp = new ConnectedApp(
+            Name: hello.AppName,
+            Version: hello.AppVersion,
+            Pid: hello.Pid,
+            Capabilities: appCapabilities,
+            UpdateMode: effectiveMode);
         receiverLoop = Task.Run(() => ReceiverLoopAsync(lifetimeCts.Token), CancellationToken.None);
+    }
+
+    private static string ResolveInitialUpdateMode(
+        IReadOnlyList<string> appCapabilities, HelloPreferences? preferences)
+    {
+        // LEASH §3.5.13 capability gating: a non-default updateMode is only
+        // honoured when the app declared the manual-updates capability.
+        bool supportsManual = appCapabilities.Contains(Protocol.Capabilities.ManualUpdates);
+        string requested = preferences?.UpdateMode ?? UpdateModes.Auto;
+
+        if (requested == UpdateModes.Manual && !supportsManual)
+        {
+            return UpdateModes.Auto;
+        }
+
+        return requested == UpdateModes.Manual ? UpdateModes.Manual : UpdateModes.Auto;
     }
 
     private async Task WaitForConnectionAsync(TimeSpan connectTimeout, CancellationToken ct)
@@ -177,7 +201,8 @@ internal sealed class AppPipeServer : IAsyncDisposable
             ProtocolVersion: ProtocolVersion.Current,
             LauncherVersion: LauncherVersion,
             Accepted: accepted,
-            Reason: reason);
+            Reason: reason,
+            Capabilities: accepted ? LauncherCapabilities.All : null);
 
         JsonElement data = JsonSerializer.SerializeToElement(payload, HuskyJsonContext.Default.WelcomePayload);
         MessageEnvelope envelope = new()
