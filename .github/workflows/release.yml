@@ -90,6 +90,16 @@ jobs:
         if: matrix.rid == 'linux-x64'
         run: dotnet pack src/Husky.Client/Husky.Client.csproj --configuration Release --output nupkg --no-build
 
+      - name: Push Husky.Client to NuGet.org
+        if: matrix.rid == 'linux-x64' && startsWith(github.ref, 'refs/tags/v')
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          dotnet nuget push 'nupkg/*.nupkg' \
+            --api-key "$NUGET_API_KEY" \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
+
       # ─── Archive both binaries ──────────────────────────────────────────
 
       - name: Archive trim build (zip)
