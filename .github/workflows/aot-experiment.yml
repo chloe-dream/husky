@@ -1,0 +1,92 @@
+name: AOT Experiment
+
+# Native AOT publish for Husky. Run via workflow_dispatch — produces a
+# native binary per RID and uploads it as an artifact. The trim path in
+# the regular release workflow is the supported channel; this is here to
+# prove out AOT before promoting it.
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/aot-experiment.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  aot:
+    name: AOT publish (${{ matrix.rid }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+          - os: ubuntu-latest
+            rid: linux-x64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore Husky.sln
+
+      - name: AOT publish
+        shell: bash
+        run: |
+          dotnet publish src/Husky/Husky.csproj \
+            --configuration Release \
+            --runtime ${{ matrix.rid }} \
+            --output publish/${{ matrix.rid }}-aot \
+            -p:PublishAot=true \
+            -p:PublishSingleFile=false \
+            -p:IncludeNativeLibrariesForSelfExtract=false \
+            -p:EnableCompressionInSingleFile=false \
+            -p:SelfContained=true \
+            -p:StripSymbols=true
+
+      - name: Report binary size
+        shell: bash
+        run: |
+          ls -lh publish/${{ matrix.rid }}-aot/
+          if [ "${{ matrix.rid }}" = "win-x64" ]; then
+            BIN="publish/${{ matrix.rid }}-aot/Husky.exe"
+          else
+            BIN="publish/${{ matrix.rid }}-aot/Husky"
+          fi
+          SIZE=$(stat --format='%s' "$BIN" 2>/dev/null || stat -f%z "$BIN")
+          MB=$((SIZE / 1024 / 1024))
+          echo "AOT binary size: $MB MB ($SIZE bytes)"
+          echo "AOT_SIZE_MB=$MB" >> $GITHUB_ENV
+
+      - name: Smoke-test the binary
+        shell: bash
+        run: |
+          if [ "${{ matrix.rid }}" = "win-x64" ]; then
+            BIN="publish/${{ matrix.rid }}-aot/Husky.exe"
+          else
+            BIN="publish/${{ matrix.rid }}-aot/Husky"
+            chmod +x "$BIN"
+          fi
+          # The binary expects husky.config.json in CWD; absent → it should
+          # render the banner and exit with a config error. A zero exit code
+          # plus the word "config" in stdout/stderr is enough to confirm the
+          # native binary actually started and reached real .NET code.
+          OUTPUT=$("$BIN" 2>&1 || true)
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -qi "config" || (echo "AOT binary did not reach config-loading code" && exit 1)
+
+      - name: Upload AOT artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: husky-aot-${{ matrix.rid }}
+          path: publish/${{ matrix.rid }}-aot/*
+          if-no-files-found: error

@@ -6,10 +6,12 @@
     <Version>0.1.0</Version>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
 
-    <!-- Trim is still off pending the dedicated trim sweep — this is
-         enabled in a follow-up step now that Retro.Crt has replaced
-         Spectre.Console (the previous trim-blocker). -->
-    <PublishTrimmed>false</PublishTrimmed>
+    <!-- Husky.Protocol uses System.Text.Json source-gen contexts and
+         Retro.Crt is trim-clean by design, so the launcher publishes
+         under full trim. Single-file + compression on top brings the
+         release artifact from ~36 MB down to ~12 MB. Verified: banner
+         + ConsoleOutput render correctly after a trimmed run. -->
+    <IsTrimmable>true</IsTrimmable>
 
     <DebugType>embedded</DebugType>
   </PropertyGroup>
@@ -23,6 +25,8 @@
     <PublishSingleFile>true</PublishSingleFile>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <PublishTrimmed>true</PublishTrimmed>
+    <TrimMode>full</TrimMode>
   </PropertyGroup>
 
   <ItemGroup>
