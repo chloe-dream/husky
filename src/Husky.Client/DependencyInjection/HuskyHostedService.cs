@@ -11,6 +11,7 @@ internal sealed class HuskyHostedService(
     IServiceProvider services) : IHostedService, IAsyncDisposable
 {
     private readonly HealthCheckService? healthCheckService = services.GetService<HealthCheckService>();
+    private readonly HuskyClientOptions clientOptions = services.GetService<HuskyClientOptions>() ?? HuskyClientOptions.Default;
     private static readonly TimeSpan HealthPollInterval = TimeSpan.FromSeconds(5);
 
     private HuskyClient? client;
@@ -20,7 +21,7 @@ internal sealed class HuskyHostedService(
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        client = await HuskyClient.AttachIfHostedAsync(cancellationToken).ConfigureAwait(false);
+        client = await HuskyClient.AttachIfHostedAsync(clientOptions, cancellationToken).ConfigureAwait(false);
         if (client is null) return;
 
         client.OnShutdown((_, _) =>

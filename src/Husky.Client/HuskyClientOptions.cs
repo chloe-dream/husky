@@ -1,12 +1,13 @@
 namespace Husky.Client;
 
-internal sealed record HuskyClientOptions(
-    TimeSpan ConnectTimeout,
-    TimeSpan WelcomeTimeout,
-    TimeSpan HeartbeatInterval)
+public sealed record HuskyClientOptions
 {
-    public static HuskyClientOptions Default { get; } = new(
-        ConnectTimeout: TimeSpan.FromSeconds(5),
-        WelcomeTimeout: TimeSpan.FromSeconds(5),
-        HeartbeatInterval: TimeSpan.FromSeconds(5));
+    public TimeSpan ConnectTimeout { get; set; } = TimeSpan.FromSeconds(5);
+    public TimeSpan WelcomeTimeout { get; set; } = TimeSpan.FromSeconds(5);
+    public TimeSpan HeartbeatInterval { get; set; } = TimeSpan.FromSeconds(5);
+    public TimeSpan RequestReplyTimeout { get; set; } = TimeSpan.FromSeconds(5);
+
+    public HuskyUpdateMode UpdateMode { get; set; } = HuskyUpdateMode.Auto;
+
+    public static HuskyClientOptions Default => new();
 }

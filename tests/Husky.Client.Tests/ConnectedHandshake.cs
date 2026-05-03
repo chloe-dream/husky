@@ -21,7 +21,8 @@ internal sealed class ConnectedHandshake : IAsyncDisposable
 
     public static async Task<ConnectedHandshake> PerformAsync(
         HuskyClientOptions? options = null,
-        string appName = "test-app")
+        string appName = "test-app",
+        IReadOnlyList<string>? launcherCapabilities = null)
     {
         PipeTestHarness harness = await PipeTestHarness.CreateAsync();
         try
@@ -33,7 +34,7 @@ internal sealed class ConnectedHandshake : IAsyncDisposable
                 CancellationToken.None);
 
             MessageEnvelope? hello = await harness.ServerReader.ReadAsync();
-            await SendWelcomeAsync(harness.ServerWriter, hello!.Id);
+            await SendWelcomeAsync(harness.ServerWriter, hello!.Id, launcherCapabilities);
 
             HuskyClient client = await attachTask;
             return new ConnectedHandshake(harness, client);
@@ -51,13 +52,17 @@ internal sealed class ConnectedHandshake : IAsyncDisposable
         await Harness.DisposeAsync();
     }
 
-    private static async Task SendWelcomeAsync(MessageWriter writer, string? helloId)
+    private static async Task SendWelcomeAsync(
+        MessageWriter writer,
+        string? helloId,
+        IReadOnlyList<string>? capabilities)
     {
         WelcomePayload payload = new(
             ProtocolVersion: ProtocolVersion.Current,
             LauncherVersion: "1.0.0-test",
             Accepted: true,
-            Reason: null);
+            Reason: null,
+            Capabilities: capabilities);
 
         JsonElement data = JsonSerializer.SerializeToElement(payload, HuskyJsonContext.Default.WelcomePayload);
         MessageEnvelope envelope = new()

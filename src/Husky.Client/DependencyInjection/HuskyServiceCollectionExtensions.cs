@@ -10,6 +10,10 @@ public static class HuskyServiceCollectionExtensions
     /// hosted (HUSKY_PIPE set) and bridges its shutdown signal to the host's
     /// IHostApplicationLifetime. In standalone mode the service is a no-op.
     ///
+    /// Pass <paramref name="configure"/> to tune connection timeouts or set the
+    /// initial update mode (e.g. <c>o.UpdateMode = HuskyUpdateMode.Manual</c>
+    /// for a Fishbowl-style "Update now" UI).
+    ///
     /// Health reporting is wired automatically: if the application registers
     /// <c>AddHealthChecks()</c>, ping responses reflect the aggregated
     /// <see cref="HealthCheckService"/> result; otherwise pongs report
@@ -18,9 +22,15 @@ public static class HuskyServiceCollectionExtensions
     /// <see cref="HuskyClient.AttachIfHostedAsync"/> and call
     /// <see cref="HuskyClient.SetHealth"/>.
     /// </summary>
-    public static IServiceCollection AddHuskyClient(this IServiceCollection services)
+    public static IServiceCollection AddHuskyClient(
+        this IServiceCollection services,
+        Action<HuskyClientOptions>? configure = null)
     {
         ArgumentNullException.ThrowIfNull(services);
+
+        HuskyClientOptions options = new();
+        configure?.Invoke(options);
+        services.AddSingleton(options);
         services.AddHostedService<HuskyHostedService>();
         return services;
     }

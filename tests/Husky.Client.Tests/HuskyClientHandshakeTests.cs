@@ -86,6 +86,69 @@ public sealed class HuskyClientHandshakeTests
     }
 
     [Fact]
+    public async Task Hello_declares_manual_updates_and_shutdown_progress_capabilities()
+    {
+        // The library always speaks both wire features, so the hello declares
+        // both — apps that don't use manual updates simply never invoke that
+        // surface, and the launcher won't push update-available while in auto
+        // mode (LEASH §3.5.11).
+        await using PipeTestHarness harness = await PipeTestHarness.CreateAsync();
+
+        Task<HuskyClient> attachTask = HuskyClient.AttachOnStreamAsync(
+            harness.Client, "test-app", HuskyClientOptions.Default, CancellationToken.None);
+
+        MessageEnvelope? envelope = await harness.ServerReader.ReadAsync();
+        HelloPayload? hello = envelope!.Data!.Value.Deserialize(HuskyJsonContext.Default.HelloPayload);
+
+        Assert.NotNull(hello!.Capabilities);
+        Assert.Contains(Capabilities.ManualUpdates, hello.Capabilities!);
+        Assert.Contains(Capabilities.ShutdownProgress, hello.Capabilities!);
+
+        await SendWelcomeAsync(harness.ServerWriter, envelope.Id, accepted: true);
+        await using HuskyClient _ = await attachTask;
+    }
+
+    [Fact]
+    public async Task Hello_preferences_reflect_configured_update_mode()
+    {
+        await using PipeTestHarness harness = await PipeTestHarness.CreateAsync();
+        HuskyClientOptions options = HuskyClientOptions.Default with
+        {
+            UpdateMode = HuskyUpdateMode.Manual,
+        };
+
+        Task<HuskyClient> attachTask = HuskyClient.AttachOnStreamAsync(
+            harness.Client, "test-app", options, CancellationToken.None);
+
+        MessageEnvelope? envelope = await harness.ServerReader.ReadAsync();
+        HelloPayload? hello = envelope!.Data!.Value.Deserialize(HuskyJsonContext.Default.HelloPayload);
+
+        Assert.Equal(UpdateModes.Manual, hello!.Preferences?.UpdateMode);
+
+        await SendWelcomeAsync(harness.ServerWriter, envelope.Id, accepted: true);
+        await using HuskyClient _ = await attachTask;
+    }
+
+    [Fact]
+    public async Task Welcome_capabilities_are_stored_on_the_client()
+    {
+        await using ConnectedHandshake handshake = await ConnectedHandshake.PerformAsync(
+            launcherCapabilities: [Capabilities.ManualUpdates, Capabilities.ShutdownProgress]);
+
+        Assert.Contains(Capabilities.ManualUpdates, handshake.Client.LauncherCapabilities);
+        Assert.True(handshake.Client.SupportsManualUpdates);
+    }
+
+    [Fact]
+    public async Task Client_falls_back_to_no_capabilities_when_launcher_does_not_advertise_them()
+    {
+        await using ConnectedHandshake handshake = await ConnectedHandshake.PerformAsync();
+
+        Assert.Empty(handshake.Client.LauncherCapabilities);
+        Assert.False(handshake.Client.SupportsManualUpdates);
+    }
+
+    [Fact]
     public async Task Handshake_throws_when_launcher_rejects()
     {
         await using PipeTestHarness harness = await PipeTestHarness.CreateAsync();
