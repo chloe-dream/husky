@@ -15,6 +15,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Husky.Client\Husky.Client.csproj" />
+    <!-- Husky.Client hides Husky.Protocol via PrivateAssets="all" so it doesn't
+         leak into consumer NuGet metadata. Tests poke at protocol internals
+         (MessageReader/Writer, payload records) directly, so we re-reference
+         it here. -->
+    <ProjectReference Include="..\..\src\Husky.Protocol\Husky.Protocol.csproj" />
   </ItemGroup>
 
 </Project>
