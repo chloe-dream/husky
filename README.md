@@ -80,23 +80,43 @@ For HTTP: embed a `config:` block in your manifest:
 
 See [`samples/`](./samples) for full templates.
 
+**Tell your users**: the user-side recipe is "download Husky, drop a six-line config next to it, run." Copy this into your project's README, swapping in your own repo + asset:
+
+> 1. Download the launcher binary for your OS from the [Husky releases page](https://github.com/Chloe3DX/husky/releases). Extract `Husky.exe` (Windows) or `Husky` (Linux).
+> 2. Save it in a folder of your choice. Next to it, create `husky.config.json`:
+>    ```json
+>    { "source": { "type": "github", "repo": "your-org/your-app", "asset": "YourApp-{version}.zip" } }
+>    ```
+> 3. Run the launcher. It downloads and starts the app on first run; updates are handled automatically thereafter.
+
 ### 3. You're a **user** — install and run someone's Husky-shipped app
 
-Drop `Husky.exe` plus a tiny `husky.config.json` somewhere convenient. The minimum:
+Many app distributors ship a one-file installer that bundles Husky for you — if so, follow their instructions and ignore this section. The recipe below is for the bring-your-own-Husky path: full control, smallest possible artefacts, fully portable.
 
-```json
-{
-  "source": {
-    "type": "github",
-    "repo": "chloe-dream/the-fishbowl",
-    "asset": "Fishbowl-{version}.zip"
-  }
-}
-```
+**Step-by-step:**
 
-That's all. On first run Husky pulls the app's config from the source, downloads the latest release, and starts it. From there: auto-updates (or manual, if the app prefers).
+1. Download the launcher binary for your OS from the [Husky releases page](https://github.com/Chloe3DX/husky/releases). Pick the trim build (`husky-vX.Y.Z-<rid>.zip` / `.tar.gz`); the `-aot` variant is a smaller native build with the same behaviour. Extract `Husky.exe` (Windows) or `Husky` (Linux).
+2. Make a folder somewhere portable — Desktop, USB stick, `~/apps/fishbowl/`, anywhere.
+3. Drop the launcher binary in.
+4. Save a `husky.config.json` next to it. The minimum:
 
-If you want to override the polling cadence or any other setting the distributor chose, just add it to your local file — local always wins.
+   ```json
+   {
+     "source": {
+       "type": "github",
+       "repo": "chloe-dream/the-fishbowl",
+       "asset": "Fishbowl-{version}.zip"
+     }
+   }
+   ```
+
+5. Run the launcher. First run pulls the app's deployment metadata (`name`, `executable`, timing knobs) from the source itself, downloads the latest release into `app/`, and starts it. From there: auto-updates (or manual, if the app prefers — its UI will tell you).
+
+The folder is fully self-contained — your app's data lives in `app/data/` and moves with the folder if you copy it elsewhere. No Registry, no `%AppData%`, no admin rights.
+
+**Overriding settings**: anything the distributor chose can be overridden by adding the field to your local `husky.config.json`. Local always wins. See [`samples/`](./samples) for the full set of fields.
+
+**Husky itself doesn't self-update.** Grab a newer launcher from the releases page when you want it; replacing the binary in place is fine — your app config and `app/` directory keep working.
 
 ---
 
