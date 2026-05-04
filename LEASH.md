@@ -549,13 +549,16 @@ The executable launcher binary.
 
 ### 5.2 Configuration
 
-Husky operates against an **effective config** assembled at runtime from three layers, in this precedence order (higher wins):
+Husky operates inside a **working directory** which holds the local `husky.config.json` (if any) and the `app/` and `download/` subtrees. By default the working directory is the process's current working directory (the shell's cwd). It can be redirected with the `--dir <path>` flag — useful when Husky lives on `PATH` and the install lives elsewhere. The working directory must exist; `app/` and `download/` are created on demand. The launcher binary's own location is irrelevant beyond launching itself.
 
-1. **Local `husky.config.json`** — file in the same directory as `Husky.exe`. The user's view: must always contain `source`, may carry overrides for any other field.
-2. **Source-supplied config** — fetched from the configured source on every successful update poll (HTTP manifest's `config` block §9.3, or a `husky.config.json` from a GitHub release asset / repo root §9.2). The app author's view: deployment metadata for their own app.
-3. **Defaults** — built-in fallbacks for the timing knobs.
+Husky operates against an **effective config** assembled at runtime from four layers, in this precedence order (higher wins):
 
-The merge is field-by-field: a non-null value at a higher layer fills the slot; otherwise the next layer is consulted; otherwise the default applies. The local config can be as small as `{ "source": { ... } }` when the source supplies everything else.
+1. **CLI source flags** — `--manifest`, `--repo`, `--asset` (see §5.2.1). Build a synthetic `source` block at the top of the merge; nothing is persisted, the flags must be passed again on every launch. In v1.0 these flags only set `source` — no overrides for other fields.
+2. **Local `husky.config.json`** — file in the working directory. May contain `source` and overrides for any other field. Optional when CLI source flags supply a source.
+3. **Source-supplied config** — fetched from the configured source on every successful update poll (HTTP manifest's `config` block §9.3, or a `husky.config.json` from a GitHub release asset / repo root §9.2). The app author's view: deployment metadata for their own app.
+4. **Defaults** — built-in fallbacks for the timing knobs.
+
+The merge is field-by-field: a non-null value at a higher layer fills the slot; otherwise the next layer is consulted; otherwise the default applies. The local config can be as small as `{ "source": { ... } }` when the source supplies everything else, or absent entirely when `--manifest`/`--repo` is on the command line.
 
 **Schema** — same fields apply to both the local file and the source-supplied block (which has no `source`):
 
@@ -582,7 +585,7 @@ The merge is field-by-field: a non-null value at a higher layer fills the slot; 
 
 | Field | Type | Layers that may set it | Required (effective) | Default |
 |-------|------|------------------------|----------------------|---------|
-| `source` | object | local only — *never* read from source-supplied (anti-redirect) | ✓ | — |
+| `source` | object | CLI flags or local — *never* read from source-supplied (anti-redirect) | ✓ | — |
 | `name` | string | local, source-supplied | ✓ | — |
 | `executable` | string | local, source-supplied | ✓ | — |
 | `checkMinutes` | int (≥ 5) | local, source-supplied | – | `60` |
@@ -605,7 +608,11 @@ The merge is field-by-field: a non-null value at a higher layer fills the slot; 
 
 | Situation | Behavior |
 |-----------|----------|
-| Local file missing, unparseable, or `source` malformed | exit code `2`, clear console message |
+| Conflicting CLI flags (`--manifest` + `--repo`, repeated flag, `--asset` without `--repo`, `--dir` pointing at a non-existent directory) | exit code `2`, message naming the offending flag combination |
+| No `source` from any layer (no CLI source flags **and** no local file or local file without `source`) | exit code `2`, clear console message |
+| Local file present but unparseable | exit code `2`, even if CLI supplies source — fix the file or delete it |
+| Local file present with a usable `source`, CLI also supplies `--manifest`/`--repo` | CLI wins (top layer); console warning so the user notices the override |
+| Local file missing, CLI flags supply `source` | proceed normally; nothing is persisted |
 | `name` / `executable` unresolved after merge, source poll succeeded | exit code `2` (app author omitted them — they belong in source-supplied config) |
 | `name` / `executable` unresolved after merge, source poll failed | exit code `2`, message: "config incomplete and source unreachable, retry once network is back" |
 | `name` / `executable` resolved from local config, source poll failed | console warning, continue, retry on the next polling tick |
@@ -615,22 +622,43 @@ The merge is field-by-field: a non-null value at a higher layer fills the slot; 
 
 App authors who ship via Husky should always put `name` and `executable` in their source-supplied config so their users can write a local config containing only `source`.
 
+### 5.2.1 Command-Line Flags
+
+Husky accepts a small set of flags. Anything not listed is rejected with exit code `2`.
+
+| Flag | Argument | Purpose | Notes |
+|------|----------|---------|-------|
+| `--dir <path>` | absolute or relative path | Working directory override (§5.2). | Path must exist. Default: process cwd. |
+| `--manifest <url>` | absolute `http(s)://` URL | Build a synthetic `{ "type": "http", "manifest": <url> }` source. | Mutually exclusive with `--repo`. |
+| `--repo <slug>` | `owner/name` | Build a synthetic `{ "type": "github", "repo": <slug> }` source. | Mutually exclusive with `--manifest`. |
+| `--asset <pattern>` | filename pattern, may include `{version}` | Sets `source.asset` for the GitHub provider (§9.2). | Requires `--repo`. |
+
+Each flag may appear at most once. Source flags become the top config layer (§5.2). `--dir` is not part of the config merge — it changes which directory the merge reads from.
+
+**Examples:**
+
+- `husky` — read everything from `./husky.config.json`.
+- `husky --manifest https://example.org/app/manifest.json` — no local file needed; bootstraps and runs the app described by the manifest, in cwd.
+- `husky --repo chloe-dream/the-fishbowl --dir D:\Apps\Fishbowl` — pull from a GitHub repo, run inside the named install directory.
+- `husky --repo chloe-dream/the-fishbowl --asset 'Fishbowl-{version}-win-x64.zip'` — same with a specific asset pattern.
+
 ### 5.3 Boot Sequence
 
 1. Render the Husky ASCII logo + tagline.
-2. Load and validate the **local** `husky.config.json`. Must contain `source`. On failure: exit code `2`.
-3. Initialize the source provider based on `source.type`.
-4. **Initial source poll** — fetch the latest `UpdateInfo`, which may carry a source-supplied config block. On network/parse failure: console warning; remember that the poll failed for the resolution step below.
-5. **Resolve the effective config** — merge local + source-supplied + defaults per §5.2. If `name` or `executable` ends up unresolved: exit code `2` (with the appropriate message depending on whether the source poll succeeded).
-6. Determine the current app version using the resolved `executable`:
+2. Parse command-line flags (§5.2.1). Apply `--dir` to fix the working directory; resolve `--manifest`/`--repo`/`--asset` into a synthetic CLI `source` block. On flag conflicts or a missing `--dir` target: exit code `2`.
+3. Load the local `husky.config.json` from the working directory if present. If absent and no CLI source flags were given: exit code `2`. Merge the CLI source (if any) over the local file's `source` — CLI wins, with a console warning when both supply `source`. If the resulting `source` is missing or malformed: exit code `2`.
+4. Initialize the source provider based on the resolved `source.type`.
+5. **Initial source poll** — fetch the latest `UpdateInfo`, which may carry a source-supplied config block. On network/parse failure: console warning; remember that the poll failed for the resolution step below.
+6. **Resolve the effective config** — merge CLI + local + source-supplied + defaults per §5.2. If `name` or `executable` ends up unresolved: exit code `2` (with the appropriate message depending on whether the source poll succeeded).
+7. Determine the current app version using the resolved `executable`:
    - File exists → read `FileVersionInfo.GetVersionInfo(executable).FileVersion`.
    - File does **not** exist → enter **bootstrap mode**: treat the current version as `"0.0.0"` so any source version triggers an install.
-7. Decide what to do based on the source poll result and the current vs. source version comparison:
+8. Decide what to do based on the source poll result and the current vs. source version comparison:
    - **Bootstrap mode** → run the bootstrap update flow (§7.5). On failure: exit code `2`.
    - New version available → run the update flow (§7), then start the app afterwards.
    - Otherwise → start the app (§5.4).
-8. Start the watchdog loop.
-9. Start the update-polling timer (`checkMinutes`).
+9. Start the watchdog loop.
+10. Start the update-polling timer (`checkMinutes`).
 
 ### 5.4 App Start
 
@@ -669,9 +697,8 @@ App authors who ship via Husky should always put `name` and `executable` in thei
 ## 6. Runtime Directory Layout
 
 ```
-<install-dir>/
-├── Husky.exe                  ← launcher binary
-├── husky.config.json          ← configuration
+<working-dir>/                 ← working directory (§5.2): cwd, or --dir <path>
+├── husky.config.json          ← optional when --manifest/--repo is on the command line
 ├── app/                       ← current app version
 │   ├── UmbrellaBot.exe
 │   ├── data/                  ← app user data (DB, models, etc.) — NEVER touched by launcher
@@ -687,6 +714,7 @@ App authors who ship via Husky should always put `name` and `executable` in thei
 - `app/` contains *everything* the app needs at runtime, including user data, DBs, caches, local models.
 - `download/` is transient. It is cleared before each new download. After a successful update, it remains for forensic inspection.
 - There is **no** backup directory. There is **no** state file for version info — the current version is read from the executable's metadata.
+- `Husky.exe` itself can live inside the working directory (the classic "drop Husky next to its config" deployment) or anywhere on `PATH` (when Husky is installed globally). The launcher's binary location does not affect runtime paths.
 
 ---
 
@@ -985,7 +1013,8 @@ auto-degraded to one final frame when output is redirected).
 
 | Scenario | Behavior |
 |----------|----------|
-| Config missing/broken | banner + error message in console, exit code 2 |
+| CLI flags invalid (unknown flag, conflicting source flags, missing `--dir` target) | banner + error message in console, exit code 2 |
+| Config missing/broken (no `source` resolvable from CLI or local file, or local file unparseable) | banner + error message in console, exit code 2 |
 | Executable not found | banner + error, exit code 2 |
 | Update source unreachable | console warning, update check skipped, app keeps running |
 | ZIP download failed | console warning, update aborted, app keeps running |
@@ -1057,7 +1086,7 @@ Not specified, not committed — sketches for later, when v1.0 is in the wild an
 
 v1.0 covers the protocol, the capability handshake, and config layering (local + source-supplied + defaults — see §5.2). What v1.0 does **not** cover is the user-facing distribution story: how does someone without prior Husky knowledge actually run an app like Fishbowl? Sketches for later, all additive on top of the v1.0 layering:
 
-- **CLI args.** Flags that build (or override) the config on the fly: `husky --repo X --asset 'Y-{v}.zip' --exec Z.exe`. New top-priority layer above the local file. Cheap to add post-v1.0 because the merge plumbing already exists; the only new code is flag parsing.
+- **More CLI overrides.** v1.0 ships `--manifest` / `--repo` / `--asset` / `--dir` (§5.2.1). Future flags could override individual config fields too: `--exec Z.exe`, `--name foo`, `--check 30`. Same merge layer, just more knobs.
 - **Slug invocation.** `husky chloe-dream/the-fishbowl`. The slug is the source — Husky points at GitHub, pulls the latest release's `husky.config.json` (already a v1.0 mechanism via §9.2), runs. No local file, no flags. Most natural once Husky is on PATH.
 - **Global install story.** winget / brew / install.sh / scoop. Makes slug invocation natural — install Husky once, then any Husky-ready app is one command. Always parallel to portable bundled-binary deployments, never mandatory.
 - **`husky init` subcommand.** Guided Claude-Code-style prompt sequence (4-5 questions) that writes a `husky.config.json`. For app authors committing one to their repo, or users authoring a local override. Sequential prompts only — no TUI forms (Retro.Crt forms layer is explicitly *not* a prerequisite).
@@ -1084,6 +1113,8 @@ Status: parking lot. Pick whichever matches the deployment shape we actually nee
 | **Update mode** | Per-launcher-process setting: `auto` (apply on discovery) or `manual` (notify and wait for `update-now`). Initial value comes from `hello.preferences`; can be changed at runtime. |
 | **Capability** | A feature token declared in `hello.capabilities` / `welcome.capabilities`. Replaces static config knobs for "does this app speak feature X?". |
 | **Source-supplied config** | Deployment metadata (`name`, `executable`, timing knobs) provided by the source (HTTP manifest's `config` block, or a `husky.config.json` in a GitHub release/repo). Lets the local config shrink to just `{ "source": ... }`. |
+| **Working directory** | The directory holding `husky.config.json`, `app/`, and `download/`. Defaults to the process cwd; overridden by `--dir`. Independent of where `Husky.exe` lives. |
+| **CLI source flags** | `--manifest` / `--repo` / `--asset` — top-priority config layer (§5.2). Ephemeral; nothing is written to disk. |
 
 ---
 
@@ -1103,7 +1134,8 @@ A suggested order for the initial implementation:
 10. **Capabilities & preferences** in `hello`/`welcome`: emit and consume `capabilities` arrays on both sides; thread the intersection through dispatch so unsupported messages are never sent and unsolicited optional pushes are gated.
 11. **Update protocol** end-to-end: `update-check` / `update-status` / `update-available` / `update-now` / `set-update-mode` on both sides, gated by the `manual-updates` capability; `updateMode` preference in `hello`; manual-mode trigger path in §7.1; client API surface (`CheckForUpdateAsync`, `RequestUpdateAsync`, `SetUpdateModeAsync`, `UpdateAvailable` event).
 12. **Source-supplied config**: extend `UpdateInfo` with a `Config` block; populate it in the GitHub provider (release-asset and repo-root lookup) and the HTTP provider (`config` field in manifest); switch the boot sequence (§5.3) to do the initial source poll *before* config resolution; implement the merge per §5.2 precedence rules; verify the case where the local file contains only `{ "source": ... }`.
-13. End-to-end test: example app + Husky + simulated GitHub release, exercising both auto and manual modes, a runtime mode switch, and a release whose deployment metadata comes entirely from a `husky.config.json` asset (local config is just `{ "source": ... }`).
+13. **CLI source flags & working directory**: parse `--dir`, `--manifest`, `--repo`, `--asset` per §5.2.1; switch all path resolution from "launcher's directory" to "working directory"; insert the synthetic CLI `source` as the top layer of the §5.2 merge; verify (a) `husky --manifest <url>` in an empty directory triggers bootstrap and runs, (b) CLI `source` overrides a local file's `source` with a console warning, (c) flag conflicts exit `2` cleanly.
+14. End-to-end test: example app + Husky + simulated GitHub release, exercising both auto and manual modes, a runtime mode switch, a release whose deployment metadata comes entirely from a `husky.config.json` asset (local config is just `{ "source": ... }`), and a fully CLI-driven launch (no local file, just `husky --manifest <url>`).
 
 ---
 
