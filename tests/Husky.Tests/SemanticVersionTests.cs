@@ -15,6 +15,8 @@ public sealed class SemanticVersionTests
     [InlineData("1.2.3+build.7", 1, 2, 3, "")]
     [InlineData("1.2.3-rc.1+build.7", 1, 2, 3, "rc.1")]
     [InlineData("  v1.2.3  ", 1, 2, 3, "")]
+    [InlineData("1.2.3.4", 1, 2, 3, "")]
+    [InlineData("0.0.6.0", 0, 0, 6, "")]
     public void Parse_accepts_well_formed_versions(string input, int major, int minor, int patch, string preRelease)
     {
         SemanticVersion version = SemanticVersion.Parse(input);
@@ -30,11 +32,19 @@ public sealed class SemanticVersionTests
     [InlineData(null)]
     [InlineData("not-a-version")]
     [InlineData("1.x")]
-    [InlineData("1.2.3.4")]
+    [InlineData("1.2.3.x")]
     [InlineData("1..2")]
     public void TryParse_returns_false_on_garbage(string? input)
     {
         Assert.False(SemanticVersion.TryParse(input, out _));
+    }
+
+    [Fact]
+    public void Win32_four_part_FileVersion_compares_against_three_part_SemVer()
+    {
+        SemanticVersion installed = SemanticVersion.Parse("0.0.6.0");
+        SemanticVersion remote = SemanticVersion.Parse("0.0.7");
+        Assert.True(remote > installed);
     }
 
     [Theory]

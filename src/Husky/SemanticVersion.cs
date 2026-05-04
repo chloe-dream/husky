@@ -41,7 +41,15 @@ internal readonly record struct SemanticVersion(int Major, int Minor, int Patch,
         int index = 0;
         foreach (Range range in SplitDots(span))
         {
-            if (index >= 3) return false;
+            if (index >= 3)
+            {
+                // Win32 FileVersion is 4-part (e.g. "0.0.6.0"). Tolerate trailing
+                // numeric segments as build metadata so the launcher can compare
+                // a .NET app's FileVersion against a 3-part SemVer release tag.
+                if (!int.TryParse(span[range], NumberStyles.None, CultureInfo.InvariantCulture, out _))
+                    return false;
+                continue;
+            }
             if (!int.TryParse(span[range], NumberStyles.None, CultureInfo.InvariantCulture, out int part))
                 return false;
             parts[index++] = part;
