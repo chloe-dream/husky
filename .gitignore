@@ -43,3 +43,7 @@ desktop.ini
 
 # Local Husky runtime artifacts (if the launcher is ever executed from the repo)
 download/
+
+# Claude Code — personal/local state. .claude/commands/ is checked in.
+.claude/settings.local.json
+.claude/*.lock
