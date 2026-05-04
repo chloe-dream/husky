@@ -14,7 +14,7 @@ Husky is a generic, configuration-driven launcher for .NET applications. It star
 - Watches for new releases (GitHub Releases or a custom HTTPS manifest) and installs them.
 - Two update modes, chosen by the app: **auto** (apply on discovery) or **manual** (notify and wait for the app's "Update now" trigger). Both ride the same wire protocol.
 - Asks the app to shut down cleanly before each update, then swaps the binaries and starts the new version.
-- Renders everything to a colored console — no log files, no GUI.
+- Renders everything to a colored console — gradient banner, in-place download progress bar, spinners for indeterminate waits (poll, extract, shutdown). No log files, no GUI. See [LEASH §10](./LEASH.md#10-console-rendering) for the full surface.
 - Cross-platform: Windows + Linux, x64 and arm64.
 
 ## Three roles, three perspectives

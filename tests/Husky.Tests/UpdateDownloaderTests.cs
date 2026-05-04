@@ -53,12 +53,19 @@ public sealed class UpdateDownloaderTests
         await using FakeHttpServer server = FakeHttpServer.Start(root.Path);
 
         using HttpClient client = new();
-        UpdateDownloader downloader = new(client) { OnProgress = (_, _) => throw new InvalidOperationException("boom") };
+        UpdateDownloader downloader = new(client) { Progress = new ThrowingProgressSink() };
         string target = Path.Combine(root.Path, "out.zip");
 
         await downloader.DownloadAsync(server.Url("package.zip"), expectedSha256: null, target);
 
         Assert.True(File.Exists(target));
+    }
+
+    private sealed class ThrowingProgressSink : IDownloadProgress
+    {
+        public void OnStarted(long? totalBytes) => throw new InvalidOperationException("boom-start");
+        public void OnAdvanced(long bytesReceived) => throw new InvalidOperationException("boom-advance");
+        public void OnFinished(long totalBytesReceived, TimeSpan duration) => throw new InvalidOperationException("boom-finish");
     }
 
     [Fact]

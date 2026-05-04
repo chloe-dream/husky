@@ -1,4 +1,5 @@
 using Husky.Protocol;
+using Retro.Crt;
 
 namespace Husky;
 
@@ -247,17 +248,35 @@ internal sealed class LauncherRuntime(
             ? session.ConnectedApp.Version
             : AppVersionReader.ReadCurrent(executablePath);
 
-        ConsoleOutput.Husky("sniffing for updates...");
-
-        UpdateInfo? update;
-        try
+        UpdateInfo? update = null;
+        Exception? pollError = null;
+        bool cancelled = false;
+        using (ConsoleOutput.BeginLiveWidget())
         {
-            update = await source.CheckForUpdateAsync(version, ct).ConfigureAwait(false);
+            using var spinner = Spinner.Show("sniffing for updates", SpinnerStyle.Dots, Color.LightCyan);
+            try
+            {
+                update = await source.CheckForUpdateAsync(version, ct).ConfigureAwait(false);
+                spinner.Stop(
+                    update is null ? "up to date." : $"new version found: v{update.Version}",
+                    Color.LightGreen);
+            }
+            catch (OperationCanceledException)
+            {
+                spinner.Stop("interrupted.", Color.DarkGray);
+                cancelled = true;
+            }
+            catch (Exception ex)
+            {
+                spinner.Stop("poll failed.", Color.Yellow);
+                pollError = ex;
+            }
         }
-        catch (OperationCanceledException) { return; }
-        catch (Exception ex)
+
+        if (cancelled) return;
+        if (pollError is not null)
         {
-            ConsoleOutput.Husky($"update check failed: {ex.Message}");
+            ConsoleOutput.Husky($"update check failed: {pollError.Message}");
             return;
         }
 
@@ -267,8 +286,6 @@ internal sealed class LauncherRuntime(
         UpdateAppSessionCache(session, version, update);
 
         if (update is null) return;
-
-        ConsoleOutput.Husky($"new version found: v{update.Version}");
 
         // Manual mode: notify the app and wait for update-now (LEASH §3.5.11).
         if (IsSessionInManualMode(session))

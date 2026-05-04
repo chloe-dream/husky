@@ -3,6 +3,13 @@ using Retro.Crt;
 
 namespace Husky.Tests;
 
+// Gate state in ConsoleOutput is process-global. Any test class that may
+// hold the widget (directly or via UpdateExtractor / UpdateFlow / shutdown
+// paths) shares this collection so xUnit runs them sequentially.
+[CollectionDefinition(Name)]
+public sealed class ConsoleOutputGateCollection { public const string Name = "ConsoleOutputGate"; }
+
+[Collection(ConsoleOutputGateCollection.Name)]
 public sealed class ConsoleOutputTests
 {
     private static readonly DateTime FixedTime = new(2026, 5, 1, 14, 55, 42);
@@ -69,6 +76,90 @@ public sealed class ConsoleOutputTests
         // No segment should be the bare word "down" with a color attached.
         var rogue = segs.FirstOrDefault(s => s.Text == "down" && s.Color is not null);
         Assert.Equal(default, rogue);
+    }
+
+    [Fact]
+    public void LiveWidget_queues_app_lines_until_dispose()
+    {
+        using var sink = new StringWriter();
+        using (Crt.WithSink(sink))
+        {
+            var widget = ConsoleOutput.BeginLiveWidget();
+
+            ConsoleOutput.AppOut("first");
+            ConsoleOutput.AppOut("second");
+
+            // While the widget is active, nothing should have reached the sink.
+            Assert.Equal(string.Empty, sink.ToString());
+
+            widget.Dispose();
+
+            // After dispose, both queued lines flush in arrival order.
+            var output = sink.ToString();
+            var firstIdx = output.IndexOf("first", StringComparison.Ordinal);
+            var secondIdx = output.IndexOf("second", StringComparison.Ordinal);
+            Assert.True(firstIdx >= 0 && secondIdx > firstIdx,
+                $"Expected 'first' before 'second' in flush; got: {output}");
+        }
+    }
+
+    [Fact]
+    public void LiveWidget_overflow_drops_oldest_and_logs_elided_marker()
+    {
+        const int Cap = ConsoleOutput.LiveWidgetQueueCap;
+        const int Overflow = 5;
+
+        using var sink = new StringWriter();
+        using (Crt.WithSink(sink))
+        {
+            var widget = ConsoleOutput.BeginLiveWidget();
+
+            for (var i = 0; i < Cap + Overflow; i++)
+                ConsoleOutput.AppOut($"line-{i}");
+
+            widget.Dispose();
+
+            var output = sink.ToString();
+
+            // The first 5 lines should have been dropped; line-5 .. line-(Cap+4) survive.
+            for (var i = 0; i < Overflow; i++)
+                Assert.DoesNotContain($"line-{i} ", output, StringComparison.Ordinal);
+            Assert.Contains($"line-{Overflow}", output, StringComparison.Ordinal);
+            Assert.Contains($"line-{Cap + Overflow - 1}", output, StringComparison.Ordinal);
+
+            Assert.Contains($"… {Overflow} app line(s) elided", output, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void Husky_force_flag_bypasses_active_widget_queue()
+    {
+        using var sink = new StringWriter();
+        using (Crt.WithSink(sink))
+        {
+            var widget = ConsoleOutput.BeginLiveWidget();
+
+            ConsoleOutput.Husky("forced-line", force: true);
+
+            // Force lines write through immediately, without waiting for dispose.
+            Assert.Contains("forced-line", sink.ToString(), StringComparison.Ordinal);
+
+            widget.Dispose();
+        }
+    }
+
+    [Fact]
+    public void BeginLiveWidget_throws_when_one_is_already_active()
+    {
+        var first = ConsoleOutput.BeginLiveWidget();
+        try
+        {
+            Assert.Throws<InvalidOperationException>(() => ConsoleOutput.BeginLiveWidget());
+        }
+        finally
+        {
+            first.Dispose();
+        }
     }
 
     private static ConsoleOutput.LineSegment SegmentWithText(

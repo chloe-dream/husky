@@ -3,6 +3,7 @@ using Husky.Tests.Fixtures;
 
 namespace Husky.Tests;
 
+[Collection(ConsoleOutputGateCollection.Name)]
 public sealed class UpdateFlowTests
 {
     [Fact]

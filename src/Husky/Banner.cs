@@ -33,12 +33,16 @@ internal static class Banner
         "                                              ▅███████▆",
     ];
 
+    // Husky-fur palette: cool ice-blue at the top, brighter cyan at the
+    // belly. Gradient endpoints are truecolor; on Standard16 terminals Crt
+    // silently falls back to the first colour, which still reads as the
+    // banner's signature cyan.
+    private static readonly Color GradientFrom = Color.Rgb(120, 180, 220);
+    private static readonly Color GradientTo   = Color.Rgb(150, 240, 255);
+
     public static void Render(string version)
     {
-        using (Crt.WithStyle(fg: Color.LightCyan))
-        {
-            for (var i = 0; i < Logo.Length; i++) Crt.WriteLine(Logo[i]);
-        }
+        Retro.Crt.Banner.Gradient(Logo, from: GradientFrom, to: GradientTo);
         Crt.WriteLine();
 
         Crt.Write("  ");

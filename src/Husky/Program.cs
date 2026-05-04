@@ -2,13 +2,14 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using Husky;
+using Retro.Crt;
 
 // The banner art uses Unicode block characters; force UTF-8 so Windows
 // consoles on legacy code pages render them instead of '?'.
 Console.OutputEncoding = Encoding.UTF8;
 
 string launcherVersion = GetLauncherVersion();
-Banner.Render(launcherVersion);
+Husky.Banner.Render(launcherVersion);
 
 // Step 1 — parse CLI flags (LEASH §5.2.1). Resolves --dir and the
 // synthetic source block before we touch any file.
@@ -113,25 +114,37 @@ using PosixSignalRegistration sigtermReg = PosixSignalRegistration.Create(
 // always return the latest available release (so we get the source-supplied
 // config block whether or not we'd update). A network failure here is OK if
 // the local config can stand on its own.
-ConsoleOutput.Husky("sniffing for updates...");
 UpdateInfo? bootPoll = null;
-try
+Exception? bootPollError = null;
+bool bootPollCancelled = false;
+using (ConsoleOutput.BeginLiveWidget())
 {
-    bootPoll = await source.CheckForUpdateAsync("0.0.0", gracefulTrigger.Token).ConfigureAwait(false);
-    if (bootPoll?.SourceFieldDropped == true)
+    using var spinner = Spinner.Show("sniffing for updates", SpinnerStyle.Dots, Color.LightCyan);
+    try
     {
-        ConsoleOutput.Husky(
-            "source-supplied config contained a 'source' block — dropped (anti-redirect, LEASH §9.2).");
+        bootPoll = await source.CheckForUpdateAsync("0.0.0", gracefulTrigger.Token).ConfigureAwait(false);
+        spinner.Stop(
+            bootPoll is null ? "up to date." : $"new version found: v{bootPoll.Version}",
+            Color.LightGreen);
+    }
+    catch (OperationCanceledException) when (gracefulTrigger.IsCancellationRequested)
+    {
+        spinner.Stop("interrupted.", Color.DarkGray);
+        bootPollCancelled = true;
+    }
+    catch (Exception ex)
+    {
+        spinner.Stop("poll failed.", Color.Yellow);
+        bootPollError = ex;
     }
 }
-catch (OperationCanceledException) when (gracefulTrigger.IsCancellationRequested)
-{
-    return ExitCodes.Ok;
-}
-catch (Exception ex)
-{
-    ConsoleOutput.Husky($"initial source poll failed: {ex.Message}");
-}
+
+if (bootPollCancelled) return ExitCodes.Ok;
+if (bootPollError is not null)
+    ConsoleOutput.Husky($"initial source poll failed: {bootPollError.Message}");
+if (bootPoll?.SourceFieldDropped == true)
+    ConsoleOutput.Husky(
+        "source-supplied config contained a 'source' block — dropped (anti-redirect, LEASH §9.2).");
 
 // Step 6 — resolve the effective config (CLI source + local + source-supplied + defaults).
 HuskyConfig config;
@@ -151,15 +164,8 @@ string executablePath = Path.GetFullPath(Path.Combine(workingDirectory, config.E
 string installDirectory = workingDirectory;
 
 UpdateDownloader downloader = new(httpClient);
-long lastReportedMb = -1;
-downloader.OnProgress = (received, total) =>
-{
-    long mb = received / (1024 * 1024);
-    if (mb == lastReportedMb && total is not null && received < total) return;
-    lastReportedMb = mb;
-    string totalText = total is { } t ? $" / {HumanBytes.Format(t)}" : "";
-    ConsoleOutput.Husky($"fetching... {HumanBytes.Format(received)}{totalText}");
-};
+using ProgressBarDownloadSink progressSink = new();
+downloader.Progress = progressSink;
 using UpdateFlow updateFlow = new(downloader, installDirectory, config.Executable);
 
 AppSessionLauncher sessionLauncher = new(

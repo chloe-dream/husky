@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using Retro.Crt;
 
 namespace Husky;
 
@@ -25,13 +26,22 @@ internal static class UpdateExtractor
             Directory.Delete(targetDirectory, recursive: true);
         Directory.CreateDirectory(targetDirectory);
 
-        try
+        // ZipFile.ExtractToDirectory is synchronous with no progress hook. A
+        // spinner gives the user a "still working" cue and stays in the LEASH
+        // §10.4 voice on its way out.
+        using (ConsoleOutput.BeginLiveWidget())
         {
-            ZipFile.ExtractToDirectory(zipPath, targetDirectory);
-        }
-        catch (InvalidDataException ex)
-        {
-            throw new UpdateException($"Update package is corrupt: {ex.Message}", ex);
+            using var spinner = Spinner.Show("extracting", SpinnerStyle.Braille, Color.LightCyan);
+            try
+            {
+                ZipFile.ExtractToDirectory(zipPath, targetDirectory);
+                spinner.Stop("extracted.", Color.LightGreen);
+            }
+            catch (InvalidDataException ex)
+            {
+                spinner.Stop("extract failed.", Color.LightRed);
+                throw new UpdateException($"Update package is corrupt: {ex.Message}", ex);
+            }
         }
 
         string expectedAbsolute = Path.Combine(

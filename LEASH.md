@@ -922,22 +922,21 @@ The `source` block of any source-supplied config is dropped with a console warni
 
 ### 10.1 Library
 
-- **[Retro.Crt](https://github.com/chloe-dream/retro-crt)** (NuGet) for color, banner, progress bars, semantic logging.
+- **[Retro.Crt](https://github.com/chloe-dream/retro-crt)** (NuGet, **0.3.0+**) for color, banner, progress bars, spinners, semantic logging.
 - Pascal CRT-Unit-style API. Tiny, dependency-free, trim- and AOT-clean.
 - Cross-platform, ANSI-capable on modern terminals; `NO_COLOR` and Windows
-  legacy console are handled by the library.
+  legacy console are handled by the library. Truecolor is quantized down to
+  256-color or Standard16 if the terminal cannot render the full 24 bits.
 
 ### 10.2 Greeting Banner
 
-On startup: Husky ASCII logo + tagline. The concrete ASCII art is the designer's choice and is stored as a `const string` in the launcher code.
-
-Example (placeholder — final art chosen by the author):
+On startup: Husky ASCII logo + tagline. The ASCII art is stored as a `string[]` in the launcher code and rendered with `Retro.Crt.Banner.Gradient` — colour interpolated per line from a cool ice-blue at the top to a brighter cyan at the bottom (the husky-fur metaphor). On terminals without truecolor, Crt falls back to the gradient's start colour.
 
 ```
-  [ice-blue]<husky-ascii-art>[/]
+  <husky-ascii-art (rendered with ice-blue→cyan vertical gradient)>
 
-  [bold cyan]Husky[/] [dim]v1.0.0[/]
-  [dim]your loyal app launcher[/]
+  Husky v0.3.0
+  your loyal app launcher
 ```
 
 ### 10.3 Log Line Format
@@ -951,36 +950,81 @@ HH:mm:ss  <source>  <message>
   - `husky` → cyan
   - `app` → green (stdout) / red (stderr)
   - `pipe` → dim (only when verbose-debug is opted in)
-- `<message>`: default foreground, with status-word highlights (e.g. `up` green, `down` red, `degraded` yellow).
+- `<message>`: default foreground, with status-word highlights (e.g. `up` green, `down` red, `degraded` yellow, `growling` yellow).
 
 ### 10.4 Husky Voice
 
 Husky speaks tersely, like a dog — short, punchy, with the occasional `woof.`. But never in the way. Examples:
 
 - Start: `woof. starting umbrella-bot`
-- Update check: `sniffing for updates...`
-- Update found: `new version found: v1.4.3`
-- Download: `fetching... <progress-bar>`
-- Shutdown: `asking app to sit.`
-- Hard-kill: `app didn't respond. growling.` → `taking it down.`
+- Update check (spinner): `sniffing for updates` → `up to date.` or `new version found: v1.4.3` or `poll failed.`
+- Download (progress bar): label `fetching`, summary line `fetched 6.6 MB in 4.2 s.`
+- Extract (spinner): `extracting` → `extracted.` or `extract failed.`
+- Shutdown (spinner): `asking app to sit` → `app sat down.` or `app didn't respond. growling.` or `double interrupt — taking it down.`. Intermediate states drive the same spinner via `Update`: `no shutdown-ack — waiting anyway`, `pipe is gone — waiting for exit`, `grace period (+10s)`.
 - Restart: `back online.` or `woof. <appname> v<version> is up.`
 - Crash limit reached: `enough. lying down.`
 
-These are *suggestions* — the implementer is free to stay in the Husky voice as they see fit.
+These are *suggestions* — the implementer is free to stay in the Husky voice as they see fit. No AI clichés (`delve`, `navigate`, `seamless`, …) anywhere in user-visible text.
 
 ### 10.5 Progress Bars
 
 During download: `Retro.Crt.ProgressBar` (single-line, in-place redraw,
-auto-degraded to one final frame when output is redirected).
+auto-degraded to one final frame when output is redirected, hides the
+terminal cursor for its lifetime).
+
+The bar owns its line — it does **not** carry the `HH:mm:ss  husky    `
+prefix that normal log lines do, because Crt's CR-driven redraw would
+clobber the prefix on each frame. After the bar closes, a normal-format
+summary log line carries the result:
 
 ```
-14:55:42  husky    fetching... ████████░░░░░░░░░  62%  (4.1/6.6 MB)
+ fetching ████████░░░░░░░░  62%  4 100 000 / 6 600 000
+
+15:03:04  husky     fetched 6.6 MB in 4.2 s.
 ```
 
-### 10.6 No File Logging
+When `Content-Length` is missing on the response, the bar uses a one-cell
+total and pings to "100%" once on completion; the summary log line is
+always authoritative for byte count and duration.
+
+### 10.6 Spinners
+
+For indeterminate operations Husky uses `Retro.Crt.Spinner`:
+
+- `sniffing for updates` (style `Dots`) — wraps every source-poll round.
+- `extracting` (style `Braille`) — wraps the synchronous `ZipFile.ExtractToDirectory`.
+- `asking app to sit` (style `Pipe`) — wraps the entire graceful-shutdown wait sequence.
+
+Like the progress bar, a spinner owns its line. Intermediate state is
+pushed through `Spinner.Update(label)`; the final outcome through
+`Spinner.Stop(label, color)`. Without ANSI support the spinner does
+not animate — it writes the label once and a newline on `Stop`.
+
+### 10.7 Live-Widget Gate
+
+A `ProgressBar` or `Spinner` can be visually shredded by interleaved log
+lines from the hosted app's stdout/stderr (and from the launcher's own
+warnings). Husky guards every widget with a process-global gate
+(`ConsoleOutput.BeginLiveWidget()`):
+
+- While a widget is active, app/launcher log lines are queued in a
+  bounded ring (cap **256 lines**, oldest dropped with a synthetic
+  `… N app line(s) elided` marker on flush).
+- On widget dispose, queued lines are flushed in arrival order with
+  their original timestamps preserved.
+- Error escalations that must be visible immediately (e.g. watchdog
+  `growling`) bypass the gate via a `force: true` overload of the husky
+  log channel — at the cost of briefly clobbering the active widget's
+  frame; the next redraw recovers.
+- Two widgets at once are a contract error and throw — Husky never has
+  more than one foreground widget by design (download bar OR shutdown
+  spinner OR extract spinner OR sniffing spinner — never overlapping).
+
+### 10.8 No File Logging
 
 - Husky writes nothing to files. Everything goes to the console.
 - Persistence is the operator's job: redirect output with OS tools (`> husky.log` / `journalctl`).
+- Bars and spinners auto-degrade when stdout is redirected — log files do not accumulate intermediate progress frames.
 
 ---
 

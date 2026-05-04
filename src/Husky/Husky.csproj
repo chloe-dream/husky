@@ -3,7 +3,7 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <AssemblyName>Husky</AssemblyName>
-    <Version>0.2.1</Version>
+    <Version>0.3.0</Version>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
 
     <!-- Husky.Protocol uses System.Text.Json source-gen contexts and
@@ -34,7 +34,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Retro.Crt" Version="0.2.1" />
+    <PackageReference Include="Retro.Crt" Version="0.3.0" />
   </ItemGroup>
 
   <ItemGroup>
