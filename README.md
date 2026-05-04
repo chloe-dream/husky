@@ -110,7 +110,7 @@ Many app distributors ship a one-file installer that bundles Husky for you — i
 
 **Step-by-step:**
 
-1. Download the launcher binary for your OS from the [Husky releases page](https://github.com/chloe-dream/husky/releases). Pick the trim build (`husky-vX.Y.Z-<rid>.zip` / `.tar.gz`); the `-aot` variant is a smaller native build with the same behaviour. Extract `Husky.exe` (Windows) or `Husky` (Linux).
+1. Download the launcher binary for your OS from the [Husky releases page](https://github.com/chloe-dream/husky/releases). Pick the trim build (`husky-<rid>.zip` / `.tar.gz`); the `-aot` variant is a smaller native build with the same behaviour. Extract `Husky.exe` (Windows) or `Husky` (Linux).
 2. Make a folder somewhere portable — Desktop, USB stick, `~/apps/fishbowl/`, anywhere.
 3. From inside that folder, run the launcher with the source on the command line:
 
@@ -141,6 +141,25 @@ The folder is fully self-contained — your app's data lives in `app/data/` and 
 ```
 Husky --repo chloe-dream/the-fishbowl --dir D:\Apps\Fishbowl
 ```
+
+**One-shot PowerShell bootstrap (Windows).** The launcher's release assets are versionless, so a tiny script next to your install can fetch Husky on first run and start it on every run — no manual download, no `husky.config.json`. Drop this into `Run.ps1` next to where you want the app installed:
+
+```powershell
+$ErrorActionPreference = 'Stop'
+$dir = $PSScriptRoot
+$exe = Join-Path $dir 'Husky.exe'
+
+if (-not (Test-Path $exe)) {
+    $zip = Join-Path $env:TEMP 'husky.zip'
+    Invoke-WebRequest 'https://github.com/chloe-dream/husky/releases/latest/download/husky-win-x64.zip' -OutFile $zip -UseBasicParsing
+    Expand-Archive $zip $dir -Force
+    Remove-Item $zip
+}
+
+& $exe --manifest 'https://example.com/myapp/manifest.json' --dir $dir
+```
+
+Swap `--manifest <url>` for `--repo your-org/your-app` if you publish via GitHub Releases. Re-running the script reuses the cached `Husky.exe`; delete it (or point at a different `--dir`) to start fresh.
 
 **Overriding settings**: anything the distributor chose can be overridden by adding the field to your local `husky.config.json`. CLI flags win over the local file, which wins over source-supplied defaults. See [`samples/`](./samples) for the full set of fields.
 
