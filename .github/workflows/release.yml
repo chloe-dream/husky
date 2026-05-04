@@ -101,32 +101,36 @@ jobs:
             --skip-duplicate
 
       # ─── Archive both binaries ──────────────────────────────────────────
+      #
+      # Asset names are versionless on purpose so that the
+      # `releases/latest/download/<name>` shortcut resolves cleanly
+      # without the caller having to know the current tag. The version
+      # lives in the URL path (`/releases/download/v<X.Y.Z>/...`) and on
+      # the release page itself.
 
       - name: Archive trim build (zip)
         if: matrix.archive == 'zip'
         shell: pwsh
         run: |
-          $tag = "${{ steps.tag.outputs.tag }}"
-          Compress-Archive -Path publish/${{ matrix.rid }}/* -DestinationPath "husky-$tag-${{ matrix.rid }}.zip"
-          Compress-Archive -Path publish/${{ matrix.rid }}-aot/${{ matrix.exe }} -DestinationPath "husky-$tag-${{ matrix.rid }}-aot.zip"
+          Compress-Archive -Path publish/${{ matrix.rid }}/* -DestinationPath "husky-${{ matrix.rid }}.zip"
+          Compress-Archive -Path publish/${{ matrix.rid }}-aot/${{ matrix.exe }} -DestinationPath "husky-${{ matrix.rid }}-aot.zip"
 
       - name: Archive trim build (tar.gz)
         if: matrix.archive == 'tar.gz'
         shell: bash
         run: |
-          tag="${{ steps.tag.outputs.tag }}"
-          tar -czf "husky-${tag}-${{ matrix.rid }}.tar.gz" -C publish/${{ matrix.rid }} .
-          tar -czf "husky-${tag}-${{ matrix.rid }}-aot.tar.gz" -C publish/${{ matrix.rid }}-aot ${{ matrix.exe }}
+          tar -czf "husky-${{ matrix.rid }}.tar.gz" -C publish/${{ matrix.rid }} .
+          tar -czf "husky-${{ matrix.rid }}-aot.tar.gz" -C publish/${{ matrix.rid }}-aot ${{ matrix.exe }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: husky-${{ matrix.rid }}
           path: |
-            husky-*-${{ matrix.rid }}.zip
-            husky-*-${{ matrix.rid }}.tar.gz
-            husky-*-${{ matrix.rid }}-aot.zip
-            husky-*-${{ matrix.rid }}-aot.tar.gz
+            husky-${{ matrix.rid }}.zip
+            husky-${{ matrix.rid }}.tar.gz
+            husky-${{ matrix.rid }}-aot.zip
+            husky-${{ matrix.rid }}-aot.tar.gz
             nupkg/*.nupkg
             nupkg/*.snupkg
           if-no-files-found: ignore
