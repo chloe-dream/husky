@@ -80,8 +80,23 @@ For HTTP: embed a `config:` block in your manifest:
 
 See [`samples/`](./samples) for full templates.
 
-**Tell your users**: the user-side recipe is "download Husky, drop a six-line config next to it, run." Copy this into your project's README, swapping in your own repo + asset:
+**Tell your users**: there are two equally good paths — pick the one that matches your install story. Copy the relevant version into your project's README.
 
+> **Option A — one-liner.** No config file needed.
+>
+> 1. Download the launcher binary for your OS from the [Husky releases page](https://github.com/chloe-dream/husky/releases). Extract `Husky.exe` (Windows) or `Husky` (Linux).
+> 2. From the directory where the app should live, run:
+>    ```
+>    Husky --repo your-org/your-app
+>    ```
+>    or, for an HTTPS-manifest source:
+>    ```
+>    Husky --manifest https://example.com/your-app/manifest.json
+>    ```
+> 3. Husky downloads and starts the app on first run; updates are handled automatically thereafter.
+
+> **Option B — drop in a config file.** Useful when users want the launcher and config to travel together.
+>
 > 1. Download the launcher binary for your OS from the [Husky releases page](https://github.com/chloe-dream/husky/releases). Extract `Husky.exe` (Windows) or `Husky` (Linux).
 > 2. Save it in a folder of your choice. Next to it, create `husky.config.json`:
 >    ```json
@@ -97,51 +112,78 @@ Many app distributors ship a one-file installer that bundles Husky for you — i
 
 1. Download the launcher binary for your OS from the [Husky releases page](https://github.com/chloe-dream/husky/releases). Pick the trim build (`husky-vX.Y.Z-<rid>.zip` / `.tar.gz`); the `-aot` variant is a smaller native build with the same behaviour. Extract `Husky.exe` (Windows) or `Husky` (Linux).
 2. Make a folder somewhere portable — Desktop, USB stick, `~/apps/fishbowl/`, anywhere.
-3. Drop the launcher binary in.
-4. Save a `husky.config.json` next to it. The minimum (Husky will pick the first `.zip` asset on the latest release):
+3. From inside that folder, run the launcher with the source on the command line:
 
-   ```json
-   {
-     "source": {
-       "type": "github",
-       "repo": "chloe-dream/the-fishbowl"
-     }
-   }
+   ```
+   Husky --repo chloe-dream/the-fishbowl
    ```
 
-   Add `"asset": "Fishbowl-{version}.zip"` if a release ships multiple `.zip` files and you need to pick a specific one.
+   For an HTTP-manifest source:
 
-5. Run the launcher. First run pulls the app's deployment metadata (`name`, `executable`, timing knobs) from the source itself, downloads the latest release into `app/`, and starts it. From there: auto-updates (or manual, if the app prefers — its UI will tell you).
+   ```
+   Husky --manifest https://example.com/fishbowl/manifest.json
+   ```
+
+   Add `--asset "Fishbowl-{version}.zip"` if a GitHub release ships multiple `.zip` files and you need to pick a specific one.
+
+4. (Alternative) If you'd rather have the config travel with the folder, drop a `husky.config.json` next to the binary and run `Husky` with no arguments:
+
+   ```json
+   { "source": { "type": "github", "repo": "chloe-dream/the-fishbowl" } }
+   ```
+
+5. First run pulls the app's deployment metadata (`name`, `executable`, timing knobs) from the source itself, downloads the latest release into `app/`, and starts it. From there: auto-updates (or manual, if the app prefers — its UI will tell you).
 
 The folder is fully self-contained — your app's data lives in `app/data/` and moves with the folder if you copy it elsewhere. No Registry, no `%AppData%`, no admin rights.
 
-**Overriding settings**: anything the distributor chose can be overridden by adding the field to your local `husky.config.json`. Local always wins. See [`samples/`](./samples) for the full set of fields.
+**Working directory.** Husky operates against the current working directory by default. If the launcher lives on `PATH` and the install is somewhere else, point at it with `--dir`:
+
+```
+Husky --repo chloe-dream/the-fishbowl --dir D:\Apps\Fishbowl
+```
+
+**Overriding settings**: anything the distributor chose can be overridden by adding the field to your local `husky.config.json`. CLI flags win over the local file, which wins over source-supplied defaults. See [`samples/`](./samples) for the full set of fields.
 
 **Husky itself doesn't self-update.** Grab a newer launcher from the releases page when you want it; replacing the binary in place is fine — your app config and `app/` directory keep working.
 
 ---
 
+## Command-line flags
+
+Everything the launcher takes on the command line:
+
+| Flag | Argument | What it does |
+|------|----------|--------------|
+| `--manifest <url>` | absolute `http(s)://` URL | Source = HTTP manifest. Mutually exclusive with `--repo`. |
+| `--repo <slug>` | `owner/name` | Source = GitHub Releases. Mutually exclusive with `--manifest`. |
+| `--asset <pattern>` | filename, may contain `{version}` | Picks a specific GitHub release asset. Requires `--repo`. |
+| `--dir <path>` | absolute or relative path | Working directory override. Default: process cwd. |
+
+`--manifest` / `--repo` build a synthetic `source` block at the top of the config merge, so a CLI invocation needs no local file. `--dir` redirects the directory that holds `husky.config.json`, `app/`, and `download/` — handy when Husky lives on `PATH` and the install is elsewhere.
+
 ## How config resolves
 
-Three layers, highest priority first:
+Four layers, highest priority first:
 
-1. **Local `husky.config.json`** — what *you* author. Only `source` is required; everything else is an optional override.
-2. **Source-supplied config** — what the *app author* ships. Pulled from a GitHub asset / repo file or embedded in the HTTP manifest.
-3. **Built-in defaults** — Husky's fallbacks for the timing knobs.
+1. **CLI source flags** — `--manifest` / `--repo` / `--asset`. Ephemeral; not written to disk.
+2. **Local `husky.config.json`** — what *you* author. May contain `source` and any other override.
+3. **Source-supplied config** — what the *app author* ships. Pulled from a GitHub asset / repo file or embedded in the HTTP manifest.
+4. **Built-in defaults** — Husky's fallbacks for the timing knobs.
 
-Field-by-field merge: a non-null value at a higher layer fills the slot. The minimum local config is `{ "source": { ... } }` whenever the source supplies `name` and `executable`.
+Field-by-field merge: a non-null value at a higher layer fills the slot. The local file may be absent entirely when CLI flags supply a source, or shrink to `{ "source": { ... } }` whenever the source supplies `name` and `executable`.
 
 ## Runtime layout
 
 ```
-<install-dir>/
-  Husky.exe                  ← launcher binary
-  husky.config.json          ← local config (just `source` may be enough)
-  app/                       ← installed and updated by Husky
+<working-dir>/                ← cwd, or wherever --dir points
+  husky.config.json           ← optional when --manifest/--repo is on the command line
+  app/                        ← installed and updated by Husky
     YourApp.exe
-    data/                    ← your app's data, never touched by Husky
-  download/                  ← last update package, kept for forensics
+    data/                     ← your app's data, never touched by Husky
+  download/                   ← last update package, kept for forensics
 ```
+
+`Husky.exe` itself lives wherever you put it — next to the install, or somewhere on `PATH`. The launcher's binary location does not affect runtime paths.
 
 ## Project layout
 
