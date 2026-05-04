@@ -7,18 +7,41 @@ using Husky;
 // consoles on legacy code pages render them instead of '?'.
 Console.OutputEncoding = Encoding.UTF8;
 
-string launcherDir = AppContext.BaseDirectory;
-string configPath = Path.Combine(launcherDir, HuskyConfigLoader.DefaultFileName);
-
 string launcherVersion = GetLauncherVersion();
 Banner.Render(launcherVersion);
 
-// Step 1 — load the local config. Only `source` is required at this point;
-// `name` and `executable` may come from source-supplied config (LEASH §5.2).
-LocalHuskyConfig localConfig;
+// Step 1 — parse CLI flags (LEASH §5.2.1). Resolves --dir and the
+// synthetic source block before we touch any file.
+CliArgs cliArgs;
 try
 {
-    localConfig = HuskyConfigLoader.Load(configPath);
+    cliArgs = CliArgsParser.Parse(args);
+}
+catch (HuskyConfigException ex)
+{
+    ConsoleOutput.Husky($"command-line error: {ex.Message}");
+    return ExitCodes.ConfigError;
+}
+
+string workingDirectory;
+try
+{
+    workingDirectory = ResolveWorkingDirectory(cliArgs.WorkingDirectory);
+}
+catch (HuskyConfigException ex)
+{
+    ConsoleOutput.Husky($"command-line error: {ex.Message}");
+    return ExitCodes.ConfigError;
+}
+
+string configPath = Path.Combine(workingDirectory, HuskyConfigLoader.DefaultFileName);
+
+// Step 2 — load the local config when present; tolerate its absence
+// when CLI source flags supply everything we need to bootstrap.
+LocalHuskyConfig? localConfig;
+try
+{
+    localConfig = HuskyConfigLoader.LoadIfPresent(configPath);
 }
 catch (HuskyConfigException ex)
 {
@@ -26,13 +49,29 @@ catch (HuskyConfigException ex)
     return ExitCodes.ConfigError;
 }
 
+// Step 3 — merge CLI source over local source (LEASH §5.2 layer 1 > 2).
+SourceConfig? mergedSource = cliArgs.CliSource ?? localConfig?.Source;
+if (mergedSource is null)
+{
+    ConsoleOutput.Husky(
+        localConfig is null
+            ? $"config error: no '{HuskyConfigLoader.DefaultFileName}' in '{workingDirectory}' and no '--manifest'/'--repo' on the command line."
+            : $"config error: '{configPath}' has no 'source' and no '--manifest'/'--repo' was supplied.");
+    return ExitCodes.ConfigError;
+}
+
+if (cliArgs.CliSource is not null && localConfig?.Source is not null)
+    ConsoleOutput.Husky("CLI source overrides local config (LEASH §5.2).");
+
+LocalHuskyConfig effectiveLocal = (localConfig ?? new LocalHuskyConfig()) with { Source = mergedSource };
+
 using HttpClient httpClient = BuildHttpClient(launcherVersion);
 
-// Step 2 — initialise the source provider.
+// Step 4 — initialise the source provider.
 IUpdateSource source;
 try
 {
-    source = UpdateSourceFactory.Create(localConfig.Source, httpClient, launcherVersion);
+    source = UpdateSourceFactory.Create(mergedSource, httpClient, launcherVersion);
 }
 catch (HuskyConfigException ex)
 {
@@ -55,9 +94,9 @@ void OnInterrupt()
     catch (ObjectDisposedException) { /* shutting down */ }
 }
 
-ConsoleCancelEventHandler ctrlCHandler = (_, args) =>
+ConsoleCancelEventHandler ctrlCHandler = (_, eventArgs) =>
 {
-    args.Cancel = true;
+    eventArgs.Cancel = true;
     OnInterrupt();
 };
 Console.CancelKeyPress += ctrlCHandler;
@@ -70,7 +109,7 @@ using PosixSignalRegistration sigtermReg = PosixSignalRegistration.Create(
         OnInterrupt();
     });
 
-// Step 3 — initial source poll. Currentversion "0.0.0" makes the providers
+// Step 5 — initial source poll. Currentversion "0.0.0" makes the providers
 // always return the latest available release (so we get the source-supplied
 // config block whether or not we'd update). A network failure here is OK if
 // the local config can stand on its own.
@@ -94,11 +133,11 @@ catch (Exception ex)
     ConsoleOutput.Husky($"initial source poll failed: {ex.Message}");
 }
 
-// Step 4 — resolve the effective config (local + source-supplied + defaults).
+// Step 6 — resolve the effective config (CLI source + local + source-supplied + defaults).
 HuskyConfig config;
 try
 {
-    config = HuskyConfigResolver.Resolve(localConfig, bootPoll?.Config);
+    config = HuskyConfigResolver.Resolve(effectiveLocal, bootPoll?.Config);
 }
 catch (HuskyConfigException ex)
 {
@@ -108,8 +147,8 @@ catch (HuskyConfigException ex)
     return ExitCodes.ConfigError;
 }
 
-string executablePath = Path.GetFullPath(Path.Combine(launcherDir, config.Executable));
-string installDirectory = launcherDir;
+string executablePath = Path.GetFullPath(Path.Combine(workingDirectory, config.Executable));
+string installDirectory = workingDirectory;
 
 UpdateDownloader downloader = new(httpClient);
 long lastReportedMb = -1;
@@ -167,6 +206,18 @@ static string GetLauncherVersion()
     return string.IsNullOrWhiteSpace(info)
         ? asm.GetName().Version?.ToString() ?? "0.0.0"
         : info;
+}
+
+static string ResolveWorkingDirectory(string? overrideDir)
+{
+    if (overrideDir is null)
+        return Path.GetFullPath(Directory.GetCurrentDirectory());
+
+    string resolved = Path.GetFullPath(overrideDir);
+    if (!Directory.Exists(resolved))
+        throw new HuskyConfigException(
+            $"Working directory from '--dir' does not exist: '{resolved}'.");
+    return resolved;
 }
 
 internal static class ExitCodes

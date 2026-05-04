@@ -36,6 +36,7 @@ public sealed class HuskyConfigLoaderTests
 
         Assert.Equal("umbrella-bot", config.Name);
         Assert.Equal("app/UmbrellaBot.exe", config.Executable);
+        Assert.NotNull(config.Source);
         Assert.Equal(SourceConfig.GitHubType, config.Source.Type);
         Assert.Equal("chloe/umbrella-bot", config.Source.Repo);
         Assert.Equal("UmbrellaBot-{version}.zip", config.Source.Asset);
@@ -83,6 +84,7 @@ public sealed class HuskyConfigLoaderTests
 
         Assert.Null(config.Name);
         Assert.Null(config.Executable);
+        Assert.NotNull(config.Source);
         Assert.Equal("x/y", config.Source.Repo);
     }
 
@@ -91,6 +93,7 @@ public sealed class HuskyConfigLoaderTests
     {
         LocalHuskyConfig config = HuskyConfigLoader.Parse(ValidHttpJson);
 
+        Assert.NotNull(config.Source);
         Assert.Equal(SourceConfig.HttpType, config.Source.Type);
         Assert.Equal("https://example.invalid/manifest.json", config.Source.Manifest);
     }
@@ -110,18 +113,23 @@ public sealed class HuskyConfigLoaderTests
             """;
 
         LocalHuskyConfig config = HuskyConfigLoader.Parse(json);
+        Assert.NotNull(config.Source);
         Assert.True(config.Source.AllowPreRelease);
     }
 
     [Fact]
-    public void Parse_throws_when_source_is_missing()
+    public void Parse_returns_a_local_config_with_null_source_when_source_field_is_absent()
     {
+        // LEASH §5.2.1: a local file may omit `source` entirely when CLI
+        // flags supply one. The loader stays out of that decision; the
+        // merge in Program.cs is responsible for surfacing "no source from
+        // any layer" as a config error.
         const string json = """{ "name": "umbrella-bot", "executable": "app/UmbrellaBot.exe" }""";
 
-        HuskyConfigException ex = Assert.Throws<HuskyConfigException>(
-            () => HuskyConfigLoader.Parse(json));
+        LocalHuskyConfig config = HuskyConfigLoader.Parse(json);
 
-        Assert.Contains("source", ex.Message, StringComparison.Ordinal);
+        Assert.Null(config.Source);
+        Assert.Equal("umbrella-bot", config.Name);
     }
 
     [Fact]
@@ -159,6 +167,7 @@ public sealed class HuskyConfigLoaderTests
 
         LocalHuskyConfig config = HuskyConfigLoader.Parse(json);
 
+        Assert.NotNull(config.Source);
         Assert.Equal(SourceConfig.GitHubType, config.Source.Type);
         Assert.Equal("x/y", config.Source.Repo);
         Assert.Null(config.Source.Asset);
@@ -216,6 +225,52 @@ public sealed class HuskyConfigLoaderTests
         HuskyConfigException ex = Assert.Throws<HuskyConfigException>(() => HuskyConfigLoader.Load(path));
 
         Assert.Contains("not found", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void LoadIfPresent_returns_null_when_file_does_not_exist()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"husky-absent-{Guid.NewGuid():N}.json");
+
+        LocalHuskyConfig? config = HuskyConfigLoader.LoadIfPresent(path);
+
+        Assert.Null(config);
+    }
+
+    [Fact]
+    public void LoadIfPresent_parses_the_file_when_it_exists()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"husky-present-{Guid.NewGuid():N}.json");
+        File.WriteAllText(path, ValidGitHubJson);
+        try
+        {
+            LocalHuskyConfig? config = HuskyConfigLoader.LoadIfPresent(path);
+
+            Assert.NotNull(config);
+            Assert.Equal("umbrella-bot", config!.Name);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void LoadIfPresent_still_throws_when_an_existing_file_is_unparseable()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"husky-broken-{Guid.NewGuid():N}.json");
+        File.WriteAllText(path, "{ this is not valid json");
+        try
+        {
+            HuskyConfigException ex = Assert.Throws<HuskyConfigException>(
+                () => HuskyConfigLoader.LoadIfPresent(path));
+
+            Assert.IsAssignableFrom<System.Text.Json.JsonException>(ex.InnerException);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
     }
 
     [Fact]

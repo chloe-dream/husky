@@ -24,6 +24,14 @@ internal static class HuskyConfigLoader
         return Parse(content);
     }
 
+    /// <summary>
+    /// Returns null when the file is absent — CLI source flags (LEASH §5.2.1)
+    /// can stand in for the local config. Throws on parse errors so a broken
+    /// file is never silently ignored, even when CLI supplies a source.
+    /// </summary>
+    public static LocalHuskyConfig? LoadIfPresent(string path) =>
+        File.Exists(path) ? Load(path) : null;
+
     internal static LocalHuskyConfig Parse(string json)
     {
         LocalHuskyConfig? config;
@@ -45,10 +53,10 @@ internal static class HuskyConfigLoader
 
     private static void Validate(LocalHuskyConfig config)
     {
-        if (config.Source is null)
-            throw new HuskyConfigException("Config field 'source' is required.");
-
-        ValidateSource(config.Source);
+        // Source may be null on disk: CLI flags (--manifest/--repo) can fill
+        // it in (LEASH §5.2.1). Validate only when present.
+        if (config.Source is not null)
+            ValidateSource(config.Source);
     }
 
     private static void ValidateSource(SourceConfig source)
