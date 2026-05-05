@@ -50,19 +50,22 @@ internal static class GracefulShutdown
             }
             catch (OperationCanceledException) when (hardKill.IsCancellationRequested)
             {
-                spinner.Stop("double interrupt — taking it down.", Color.LightRed);
+                spinner.Stop();
+                ConsoleOutput.Husky("double interrupt — taking it down.", messageColor: Color.LightRed);
                 await KillAndDrainAsync(session).ConfigureAwait(false);
                 return;
             }
 
             if (await TryWaitForExitAsync(session, shutdownTimeout, hardKill).ConfigureAwait(false))
             {
-                spinner.Stop("app sat down.", Color.LightGreen);
+                spinner.Stop();
+                ConsoleOutput.Husky("app sat down.", messageColor: Color.LightGreen);
                 return;
             }
             if (hardKill.IsCancellationRequested)
             {
-                spinner.Stop("double interrupt — taking it down.", Color.LightRed);
+                spinner.Stop();
+                ConsoleOutput.Husky("double interrupt — taking it down.", messageColor: Color.LightRed);
                 await KillAndDrainAsync(session).ConfigureAwait(false);
                 return;
             }
@@ -84,7 +87,8 @@ internal static class GracefulShutdown
                 }
             }
 
-            spinner.Stop("app didn't respond. growling.", Color.Yellow);
+            spinner.Stop();
+            ConsoleOutput.Husky("app didn't respond. growling.", messageColor: Color.Yellow);
             needsHardKill = true;
         }
 

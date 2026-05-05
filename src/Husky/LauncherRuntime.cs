@@ -257,18 +257,21 @@ internal sealed class LauncherRuntime(
             try
             {
                 update = await source.CheckForUpdateAsync(version, ct).ConfigureAwait(false);
-                spinner.Stop(
+                spinner.Stop();
+                ConsoleOutput.Husky(
                     update is null ? "up to date." : $"new version found: v{update.Version}",
-                    Color.LightGreen);
+                    messageColor: Color.LightGreen);
             }
             catch (OperationCanceledException)
             {
-                spinner.Stop("interrupted.", Color.DarkGray);
+                spinner.Stop();
+                ConsoleOutput.Husky("interrupted.", messageColor: Color.DarkGray);
                 cancelled = true;
             }
             catch (Exception ex)
             {
-                spinner.Stop("poll failed.", Color.Yellow);
+                spinner.Stop();
+                ConsoleOutput.Husky("poll failed.", messageColor: Color.Yellow);
                 pollError = ex;
             }
         }

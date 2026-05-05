@@ -33,8 +33,13 @@ internal static partial class ConsoleOutput
     /// frame. Reserved for error escalations that must not be swallowed
     /// behind a still-running spinner. Decorative status lines pass
     /// <c>false</c> (the default).</param>
-    public static void Husky(string message, bool force = false) =>
-        Render("husky", Color.LightCyan, message, force);
+    /// <param name="messageColor">When set, applies to every plain text
+    /// run in <paramref name="message"/>. Lets a caller carry semantic
+    /// state (success-green, warn-yellow, error-red) through the log
+    /// rather than emitting a colored widget commit out-of-band.
+    /// Status-word highlights still override per word.</param>
+    public static void Husky(string message, bool force = false, Color? messageColor = null) =>
+        Render("husky", Color.LightCyan, message, force, messageColor);
 
     /// <summary>Logs a line from the hosted app's stdout in green. Always queued behind an active live widget.</summary>
     public static void AppOut(string message) => Render("app",  Color.LightGreen, message, force: false);
@@ -69,7 +74,7 @@ internal static partial class ConsoleOutput
         return new WidgetScope();
     }
 
-    private static void Render(string source, Color sourceColor, string message, bool force)
+    private static void Render(string source, Color sourceColor, string message, bool force, Color? messageColor = null)
     {
         var when = DateTime.Now;
         lock (Lock)
@@ -81,16 +86,16 @@ internal static partial class ConsoleOutput
                     Queue.Dequeue();
                     droppedDuringWidget++;
                 }
-                Queue.Enqueue(new QueuedLine(when, source, sourceColor, message));
+                Queue.Enqueue(new QueuedLine(when, source, sourceColor, message, messageColor));
                 return;
             }
         }
-        WriteLine(when, source, sourceColor, message);
+        WriteLine(when, source, sourceColor, message, messageColor);
     }
 
-    private static void WriteLine(DateTime when, string source, Color sourceColor, string message)
+    private static void WriteLine(DateTime when, string source, Color sourceColor, string message, Color? messageColor = null)
     {
-        var line = BuildLine(when, source, sourceColor, message);
+        var line = BuildLine(when, source, sourceColor, message, messageColor);
         for (var i = 0; i < line.Count; i++)
         {
             var seg = line[i];
@@ -113,7 +118,7 @@ internal static partial class ConsoleOutput
     /// having to capture <see cref="Console.Out"/>.
     /// </summary>
     internal static IReadOnlyList<LineSegment> BuildLine(
-        DateTime when, string source, Color sourceColor, string message)
+        DateTime when, string source, Color sourceColor, string message, Color? messageColor = null)
     {
         var timestamp = when.ToString("HH:mm:ss");
         var paddedSource = source.Length >= SourceWidth ? source : source.PadRight(SourceWidth);
@@ -126,16 +131,16 @@ internal static partial class ConsoleOutput
             new("  "),
         };
 
-        AppendMessage(segments, message);
+        AppendMessage(segments, message, messageColor);
         return segments;
     }
 
-    private static void AppendMessage(List<LineSegment> segments, string message)
+    private static void AppendMessage(List<LineSegment> segments, string message, Color? messageColor)
     {
         var matches = StatusWordRegex().Matches(message);
         if (matches.Count == 0)
         {
-            segments.Add(new(message));
+            segments.Add(new(message, messageColor));
             return;
         }
 
@@ -143,11 +148,11 @@ internal static partial class ConsoleOutput
         for (var i = 0; i < matches.Count; i++)
         {
             var m = matches[i];
-            if (m.Index > pos) segments.Add(new(message[pos..m.Index]));
+            if (m.Index > pos) segments.Add(new(message[pos..m.Index], messageColor));
             segments.Add(new(m.Value, ColorForStatusWord(m.Value)));
             pos = m.Index + m.Length;
         }
-        if (pos < message.Length) segments.Add(new(message[pos..]));
+        if (pos < message.Length) segments.Add(new(message[pos..], messageColor));
     }
 
     private static Color ColorForStatusWord(string word) => word switch
@@ -167,7 +172,7 @@ internal static partial class ConsoleOutput
     internal readonly record struct LineSegment(string Text, Color? Color = null);
 
     private readonly record struct QueuedLine(
-        DateTime When, string Source, Color SourceColor, string Message);
+        DateTime When, string Source, Color SourceColor, string Message, Color? MessageColor);
 
     private sealed class WidgetScope : IDisposable
     {
@@ -192,7 +197,7 @@ internal static partial class ConsoleOutput
             for (var i = 0; i < toFlush.Length; i++)
             {
                 var l = toFlush[i];
-                WriteLine(l.When, l.Source, l.SourceColor, l.Message);
+                WriteLine(l.When, l.Source, l.SourceColor, l.Message, l.MessageColor);
             }
 
             if (dropped > 0)

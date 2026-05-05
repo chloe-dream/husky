@@ -40,7 +40,7 @@ internal sealed class ProgressBarDownloadSink : IDownloadProgress, IDisposable
         bar = ProgressBar.Start(
             total: total,
             width: BarWidth,
-            label: " fetching",
+            label: "fetching",
             color: Color.LightCyan);
     }
 

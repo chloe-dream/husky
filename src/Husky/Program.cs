@@ -123,18 +123,19 @@ using (ConsoleOutput.BeginLiveWidget())
     try
     {
         bootPoll = await source.CheckForUpdateAsync("0.0.0", gracefulTrigger.Token).ConfigureAwait(false);
-        spinner.Stop(
-            bootPoll is null ? "up to date." : $"new version found: v{bootPoll.Version}",
-            Color.LightGreen);
+        // Silent stop: LauncherRuntime owns the boot announcement (it knows
+        // the installed version and decides whether to apply, log "up to
+        // date.", or "source unreachable.") so we don't pre-empt it.
+        spinner.Stop();
     }
     catch (OperationCanceledException) when (gracefulTrigger.IsCancellationRequested)
     {
-        spinner.Stop("interrupted.", Color.DarkGray);
+        spinner.Stop();
         bootPollCancelled = true;
     }
     catch (Exception ex)
     {
-        spinner.Stop("poll failed.", Color.Yellow);
+        spinner.Stop();
         bootPollError = ex;
     }
 }

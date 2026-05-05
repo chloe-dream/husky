@@ -35,11 +35,13 @@ internal static class UpdateExtractor
             try
             {
                 ZipFile.ExtractToDirectory(zipPath, targetDirectory);
-                spinner.Stop("extracted.", Color.LightGreen);
+                spinner.Stop();
+                ConsoleOutput.Husky("extracted.", messageColor: Color.LightGreen);
             }
             catch (InvalidDataException ex)
             {
-                spinner.Stop("extract failed.", Color.LightRed);
+                spinner.Stop();
+                ConsoleOutput.Husky("extract failed.", messageColor: Color.LightRed);
                 throw new UpdateException($"Update package is corrupt: {ex.Message}", ex);
             }
         }

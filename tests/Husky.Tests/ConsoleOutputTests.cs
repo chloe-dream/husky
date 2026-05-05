@@ -132,6 +132,30 @@ public sealed class ConsoleOutputTests
     }
 
     [Fact]
+    public void BuildLine_paints_message_runs_with_messageColor_when_supplied()
+    {
+        var segs = ConsoleOutput.BuildLine(
+            FixedTime, "husky", Color.LightCyan, "extracted.", messageColor: Color.LightGreen);
+
+        var seg = SegmentWithText(segs, "extracted.");
+        Assert.Equal((byte)Standard16Index.LightGreen, seg.Color!.Value.Index);
+    }
+
+    [Fact]
+    public void BuildLine_messageColor_does_not_override_status_word_highlight()
+    {
+        var segs = ConsoleOutput.BuildLine(
+            FixedTime, "husky", Color.LightCyan, "app is up and healthy", messageColor: Color.LightGreen);
+
+        // Status words keep their semantic palette; only the surrounding text takes the message color.
+        var up = SegmentWithText(segs, "up");
+        Assert.Equal((byte)Standard16Index.LightGreen, up.Color!.Value.Index);
+
+        var prefix = SegmentWithText(segs, "app is ");
+        Assert.Equal((byte)Standard16Index.LightGreen, prefix.Color!.Value.Index);
+    }
+
+    [Fact]
     public void Husky_force_flag_bypasses_active_widget_queue()
     {
         using var sink = new StringWriter();
