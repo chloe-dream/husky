@@ -34,7 +34,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Retro.Crt" Version="0.3.0" />
+    <PackageReference Include="Retro.Crt" Version="0.6.0" />
   </ItemGroup>
 
   <ItemGroup>
