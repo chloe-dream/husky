@@ -282,7 +282,7 @@ During cleanup, the app may optionally report progress.
 
 #### 3.5.9 `update-check` — App → Launcher
 
-Asks the launcher whether an update is available right now. Reply expected. The launcher answers from its in-memory cache (last polling result); it does not trigger a fresh poll on demand.
+Asks the launcher whether an update is available right now. Reply expected. The launcher performs a fresh source poll (HTTP fetch of the manifest / GitHub release lookup) before replying, updates its cached `UpdateStatus` with the result, and answers with the freshly observed state. If the poll fails (network error, source unreachable), the launcher falls back to its last cached status so the call still resolves with the best-known truth rather than throwing on the wire.
 
 ```json
 { "id": "...", "type": "update-check" }

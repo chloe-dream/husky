@@ -50,6 +50,16 @@ internal sealed class AppPipeServer : IAsyncDisposable
     /// </summary>
     public Action? OnUpdateNowRequested { get; set; }
 
+    /// <summary>
+    /// Fires when the hosted app sends <c>update-check</c>. The launcher is
+    /// expected to poll the source synchronously, update
+    /// <see cref="CurrentUpdateStatus"/>, and return the fresh payload to
+    /// be sent in the <c>update-status</c> reply (LEASH §3.5.9). When the
+    /// callback is unset or throws, the handler falls back to
+    /// <see cref="CurrentUpdateStatus"/> so the RPC always resolves.
+    /// </summary>
+    public Func<CancellationToken, Task<UpdateStatusPayload>>? OnUpdateCheckRequested { get; set; }
+
     internal Task? ReceiverTask => receiverLoop;
 
     private AppPipeServer(string pipeName, NamedPipeServerStream pipe, string launcherVersion)
@@ -316,8 +326,7 @@ internal sealed class AppPipeServer : IAsyncDisposable
 
     private async Task HandleUpdateCheckAsync(MessageEnvelope request, CancellationToken ct)
     {
-        UpdateStatusPayload reply = CurrentUpdateStatus
-            ?? new UpdateStatusPayload(Available: false, CurrentVersion: ConnectedApp?.Version ?? "0.0.0");
+        UpdateStatusPayload reply = await ResolveUpdateCheckReplyAsync(ct).ConfigureAwait(false);
 
         JsonElement data = JsonSerializer.SerializeToElement(reply, HuskyJsonContext.Default.UpdateStatusPayload);
         MessageEnvelope envelope = new()
@@ -329,6 +338,29 @@ internal sealed class AppPipeServer : IAsyncDisposable
         };
 
         await WriteAsync(envelope, ct).ConfigureAwait(false);
+    }
+
+    private async Task<UpdateStatusPayload> ResolveUpdateCheckReplyAsync(CancellationToken ct)
+    {
+        if (OnUpdateCheckRequested is { } refresh)
+        {
+            try
+            {
+                return await refresh(ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch
+            {
+                // Fall through to the cache so the RPC still resolves with
+                // the best-known truth instead of stranding the caller.
+            }
+        }
+
+        return CurrentUpdateStatus
+            ?? new UpdateStatusPayload(Available: false, CurrentVersion: ConnectedApp?.Version ?? "0.0.0");
     }
 
     private async Task HandleSetUpdateModeAsync(MessageEnvelope request, CancellationToken ct)

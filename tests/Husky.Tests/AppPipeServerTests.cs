@@ -185,6 +185,86 @@ public sealed class AppPipeServerTests
     }
 
     [Fact]
+    public async Task UpdateCheck_invokes_OnUpdateCheckRequested_and_replies_with_its_payload()
+    {
+        // LEASH §3.5.9: when the runtime registers a fresh-poll callback, the
+        // handler must use its result instead of any pre-set cache, so the RPC
+        // returns the truth observed *now* rather than at the last polling tick.
+        await using LauncherPipeHarness h = await LauncherPipeHarness.CreateConnectedAsync();
+
+        h.Server.SetCurrentUpdateStatus(new UpdateStatusPayload(
+            Available: false, CurrentVersion: "1.0.0"));
+
+        UpdateStatusPayload fresh = new(
+            Available: true,
+            CurrentVersion: "1.0.0",
+            NewVersion: "9.9.9",
+            DownloadSizeBytes: 4242);
+        int callCount = 0;
+        h.Server.OnUpdateCheckRequested = _ =>
+        {
+            Interlocked.Increment(ref callCount);
+            return Task.FromResult(fresh);
+        };
+
+        Task accept = h.Server.AcceptAndHandshakeAsync(TimeSpan.FromSeconds(5));
+        await SendHelloAsync(h.ClientWriter, "test-app", "1.0.0", 1,
+            capabilities: [Capabilities.ManualUpdates]);
+        await ReadAsync(h.ClientReader); // welcome
+        await accept;
+
+        string requestId = Guid.NewGuid().ToString("D");
+        await h.ClientWriter.WriteAsync(new MessageEnvelope
+        {
+            Id = requestId,
+            Type = MessageTypes.UpdateCheck,
+        });
+
+        MessageEnvelope reply = await ReadAsync(h.ClientReader);
+        UpdateStatusPayload? payload = reply.Data?.Deserialize(HuskyJsonContext.Default.UpdateStatusPayload);
+
+        Assert.Equal(1, Volatile.Read(ref callCount));
+        Assert.Equal(requestId, reply.ReplyTo);
+        Assert.True(payload!.Available);
+        Assert.Equal("9.9.9", payload.NewVersion);
+        Assert.Equal(4242L, payload.DownloadSizeBytes);
+    }
+
+    [Fact]
+    public async Task UpdateCheck_falls_back_to_cache_when_OnUpdateCheckRequested_throws()
+    {
+        // Source unreachable on the on-demand poll: the RPC must still resolve
+        // with the best-known truth (last cached status) so the caller doesn't
+        // observe a wire-level failure for a recoverable network blip.
+        await using LauncherPipeHarness h = await LauncherPipeHarness.CreateConnectedAsync();
+
+        h.Server.SetCurrentUpdateStatus(new UpdateStatusPayload(
+            Available: true,
+            CurrentVersion: "1.0.0",
+            NewVersion: "1.1.0",
+            DownloadSizeBytes: 100));
+        h.Server.OnUpdateCheckRequested = _ => throw new HttpRequestException("boom");
+
+        Task accept = h.Server.AcceptAndHandshakeAsync(TimeSpan.FromSeconds(5));
+        await SendHelloAsync(h.ClientWriter, "test-app", "1.0.0", 1,
+            capabilities: [Capabilities.ManualUpdates]);
+        await ReadAsync(h.ClientReader); // welcome
+        await accept;
+
+        await h.ClientWriter.WriteAsync(new MessageEnvelope
+        {
+            Id = Guid.NewGuid().ToString("D"),
+            Type = MessageTypes.UpdateCheck,
+        });
+
+        MessageEnvelope reply = await ReadAsync(h.ClientReader);
+        UpdateStatusPayload? payload = reply.Data?.Deserialize(HuskyJsonContext.Default.UpdateStatusPayload);
+
+        Assert.True(payload!.Available);
+        Assert.Equal("1.1.0", payload.NewVersion);
+    }
+
+    [Fact]
     public async Task UpdateNow_message_invokes_OnUpdateNowRequested()
     {
         await using LauncherPipeHarness h = await LauncherPipeHarness.CreateConnectedAsync();

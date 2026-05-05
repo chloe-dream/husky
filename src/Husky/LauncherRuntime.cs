@@ -366,6 +366,55 @@ internal sealed class LauncherRuntime(
         }
     }
 
+    /// <summary>
+    /// Handles an inbound <c>update-check</c> RPC by polling the source
+    /// synchronously, refreshing both the per-runtime cached
+    /// <see cref="UpdateInfo"/> and the per-session
+    /// <see cref="UpdateStatusPayload"/>, and returning the fresh payload
+    /// for <see cref="AppPipeServer"/> to send as the reply (LEASH §3.5.9).
+    /// On poll failure the exception bubbles so the pipe handler can fall
+    /// back to the last cached status; the launcher logs the failure on its
+    /// own console.
+    /// </summary>
+    private async Task<UpdateStatusPayload> RefreshUpdateStatusFromAppAsync(CancellationToken ct)
+    {
+        AppSession? session = CurrentSession;
+        string version = session is not null
+            ? session.ConnectedApp.Version
+            : AppVersionReader.ReadCurrent(executablePath);
+
+        UpdateInfo? update;
+        try
+        {
+            update = await source.CheckForUpdateAsync(version, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            ConsoleOutput.Husky(
+                $"app asked for an update check — source unreachable: {ex.Message}",
+                messageColor: Color.Yellow);
+            throw;
+        }
+
+        cachedUpdate = update;
+        UpdateAppSessionCache(session, version, update);
+
+        ConsoleOutput.Husky(
+            update is null
+                ? "app asked for an update check — up to date."
+                : $"app asked for an update check — new version found: v{update.Version}",
+            messageColor: Color.LightGreen);
+
+        return update is null
+            ? new UpdateStatusPayload(Available: false, CurrentVersion: version)
+            : new UpdateStatusPayload(
+                Available: true,
+                CurrentVersion: version,
+                NewVersion: update.Version,
+                DownloadSizeBytes: null);
+    }
+
     private void OnUpdateNowFromApp()
     {
         UpdateInfo? snapshot = cachedUpdate;
@@ -421,6 +470,7 @@ internal sealed class LauncherRuntime(
 
         AppSession session = await sessionLauncher.StartAsync(OnSessionDeclaredDead, ct).ConfigureAwait(false);
         session.PipeServer.OnUpdateNowRequested = OnUpdateNowFromApp;
+        session.PipeServer.OnUpdateCheckRequested = RefreshUpdateStatusFromAppAsync;
         SetCurrentSession(session);
         return session;
     }

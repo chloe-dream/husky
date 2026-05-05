@@ -144,6 +144,18 @@ public sealed class HuskyClient : IAsyncDisposable
         healthProvider = provider;
     }
 
+    /// <summary>
+    /// Asks the launcher to perform a fresh source poll right now and
+    /// returns the result. The launcher fetches the manifest / queries
+    /// GitHub synchronously, refreshes its cached state, and replies with
+    /// the freshly observed status — bypassing the polling cadence (LEASH
+    /// §3.5.9). Returns <c>null</c> when no update is available; otherwise
+    /// the <see cref="HuskyUpdateInfo"/> describing the candidate version.
+    /// If the launcher's source poll fails (network error, source
+    /// unreachable), it falls back to its last cached status so this call
+    /// still resolves; check <see cref="HuskyUpdateInfo.NewVersion"/> if
+    /// you need to distinguish a stale-cache hit from a fresh "up to date".
+    /// </summary>
     public async Task<HuskyUpdateInfo?> CheckForUpdateAsync(CancellationToken ct = default)
     {
         EnsureManualUpdatesSupported();
