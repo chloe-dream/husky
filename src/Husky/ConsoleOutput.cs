@@ -30,7 +30,10 @@ internal static partial class ConsoleOutput
     /// live-widget queue (LEASH §10.7) and writes immediately even if a
     /// <see cref="ProgressBar"/> or <see cref="Spinner"/> is currently
     /// holding the line — at the cost of briefly clobbering the widget's
-    /// frame. Reserved for error escalations that must not be swallowed
+    /// frame. If a widget is actually active when the escalation fires,
+    /// a <see cref="Crt.Bell"/> is also emitted (pipe-safe via
+    /// <c>IsInteractive</c>) so the user notices the interrupt audibly.
+    /// Reserved for error escalations that must not be swallowed
     /// behind a still-running spinner. Decorative status lines pass
     /// <c>false</c> (the default).</param>
     /// <param name="messageColor">When set, applies to every plain text
@@ -77,6 +80,7 @@ internal static partial class ConsoleOutput
     private static void Render(string source, Color sourceColor, string message, bool force, Color? messageColor = null)
     {
         var when = DateTime.Now;
+        bool escalated;
         lock (Lock)
         {
             if (widgetActive && !force)
@@ -89,7 +93,9 @@ internal static partial class ConsoleOutput
                 Queue.Enqueue(new QueuedLine(when, source, sourceColor, message, messageColor));
                 return;
             }
+            escalated = widgetActive && force;
         }
+        if (escalated) Crt.Bell();
         WriteLine(when, source, sourceColor, message, messageColor);
     }
 
