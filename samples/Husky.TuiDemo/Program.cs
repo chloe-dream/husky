@@ -16,7 +16,9 @@ using Retro.Crt;
 //   5. force-true growl escalation (the dog barks audibly).
 //   6. mock sniffing cycle resolving to "new version found".
 //   7. extra-long line to verify LogViewer clipping (no wrapping).
-//   8. 200-line burst to verify the ConcurrentQueue drain keeps up.
+//   8. fake download driving the real ProgressBarDownloadSink so the
+//      in-place line (LEASH §10.6) animates against the live LogViewer.
+//   9. 200-line burst to verify the ConcurrentQueue drain keeps up.
 //
 // After the burst the demo idles. Press Esc to exit.
 //
@@ -51,6 +53,7 @@ static async Task RunFixturesAsync(CancellationToken ct)
     {
         await BootSequenceAsync(ct).ConfigureAwait(false);
         await ActivityLoopAsync(ct).ConfigureAwait(false);
+        await FakeDownloadAsync(ct).ConfigureAwait(false);
         await BurstAsync(ct).ConfigureAwait(false);
         await IdleAsync(ct).ConfigureAwait(false);
     }
@@ -144,6 +147,33 @@ static async Task ActivityLoopAsync(CancellationToken ct)
         "demo-app: VERY-LONG-LINE — " +
         new string('-', 220) +
         " end.");
+}
+
+static async Task FakeDownloadAsync(CancellationToken ct)
+{
+    ConsoleOutput.Husky("user triggered update — applying v0.4.0.");
+    await Task.Delay(400, ct).ConfigureAwait(false);
+
+    using var sink = new ProgressBarDownloadSink();
+    const long Total = 6_800_000;
+    sink.OnStarted(Total);
+
+    System.Diagnostics.Stopwatch sw = System.Diagnostics.Stopwatch.StartNew();
+    var rng = new Random(42);
+    long received = 0;
+
+    while (received < Total && !ct.IsCancellationRequested)
+    {
+        await Task.Delay(60, ct).ConfigureAwait(false);
+        // Realistic chunk-size jitter so the 10 Hz throttle in TuiInPlaceLine
+        // gets a workout. The throttle drops most updates and renders the
+        // 0% / 100% frames plus whatever lands on the 100 ms boundary.
+        long chunk = rng.Next(80_000, 280_000);
+        received = Math.Min(Total, received + chunk);
+        sink.OnAdvanced(received);
+    }
+    sw.Stop();
+    sink.OnFinished(received, sw.Elapsed);
 }
 
 static async Task BurstAsync(CancellationToken ct)

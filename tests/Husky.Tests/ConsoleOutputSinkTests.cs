@@ -50,6 +50,32 @@ public sealed class ConsoleOutputSinkTests
     }
 
     [Fact]
+    public void BeginInPlaceHusky_routes_initial_message_and_updates_to_the_sink()
+    {
+        var fake = new RecordingSink();
+        try
+        {
+            ConsoleOutput.SetSink(fake);
+
+            using ConsoleOutput.IInPlaceLine line = ConsoleOutput.BeginInPlaceHusky("fetching… 0%");
+            line.Update("fetching… 50%");
+            line.Complete("fetched 6.8 MB in 4.2 s.", Color.LightGreen);
+
+            RecordedInPlace entry = Assert.Single(fake.InPlaceLines);
+            Assert.Equal("husky", entry.Source);
+            Assert.Equal(Color.LightCyan, entry.SourceColor);
+            Assert.Equal("fetching… 0%", entry.InitialMessage);
+            Assert.Equal(["fetching… 50%"], entry.Updates);
+            Assert.Equal("fetched 6.8 MB in 4.2 s.", entry.CompletedMessage);
+            Assert.Equal(Color.LightGreen, entry.CompletedColor);
+        }
+        finally
+        {
+            ConsoleOutput.ResetSink();
+        }
+    }
+
+    [Fact]
     public void ResetSink_restores_the_default_Crt_sink()
     {
         var fake = new RecordingSink();
@@ -67,6 +93,7 @@ public sealed class ConsoleOutputSinkTests
     {
         public List<RecordedLine> Lines { get; } = [];
         public int LiveWidgetScopesOpened { get; private set; }
+        public List<RecordedInPlace> InPlaceLines { get; } = [];
 
         public void Append(
             DateTime when, string source, Color sourceColor, string message,
@@ -79,10 +106,40 @@ public sealed class ConsoleOutputSinkTests
             return new NullScope();
         }
 
+        public ConsoleOutput.IInPlaceLine BeginInPlaceLine(
+            string source, Color sourceColor, string initialMessage)
+        {
+            var entry = new RecordedInPlace(source, sourceColor, initialMessage);
+            InPlaceLines.Add(entry);
+            return entry;
+        }
+
         private sealed class NullScope : IDisposable
         {
             public void Dispose() { }
         }
+    }
+
+    public sealed class RecordedInPlace(string source, Color sourceColor, string initialMessage)
+        : ConsoleOutput.IInPlaceLine
+    {
+        public string Source { get; } = source;
+        public Color SourceColor { get; } = sourceColor;
+        public string InitialMessage { get; } = initialMessage;
+        public List<string> Updates { get; } = [];
+        public string? CompletedMessage { get; private set; }
+        public Color? CompletedColor { get; private set; }
+        public bool Disposed { get; private set; }
+
+        public void Update(string message) => Updates.Add(message);
+
+        public void Complete(string finalMessage, Color? finalMessageColor = null)
+        {
+            CompletedMessage = finalMessage;
+            CompletedColor = finalMessageColor;
+        }
+
+        public void Dispose() => Disposed = true;
     }
 
     public readonly record struct RecordedLine(string Source, Color SourceColor, string Message, bool Force);

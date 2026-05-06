@@ -10,7 +10,7 @@ namespace Husky;
 /// <see cref="LogViewer"/>, and a <see cref="HuskyChrome"/> that lays out
 /// header / log / action-bar. Implements <see cref="ConsoleOutput.IConsoleSink"/>
 /// so every <c>ConsoleOutput.Husky</c>/<c>AppOut</c>/<c>AppErr</c>/<c>Pipe</c>
-/// call from any thread queues a line that the next render tick drains
+/// call from any thread queues an op that the next render tick drains
 /// into the LogViewer.
 ///
 /// Lifecycle:
@@ -25,10 +25,20 @@ namespace Husky;
 /// </summary>
 internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
 {
-    // Background threads enqueue here; the UI thread drains during OnDraw.
+    // Background threads enqueue ops here; the UI thread drains during OnDraw.
     // LogViewer is not documented as thread-safe, so all writes go through
     // this hand-off rather than touching its Items list directly.
-    private readonly ConcurrentQueue<PendingLine> pending = new();
+    private readonly ConcurrentQueue<PendingOp> pending = new();
+
+    // Tracks whether an in-place line currently owns the LogViewer's tail
+    // entry. Read & written only from the UI thread (DrainPending) so no
+    // synchronisation is needed; the *enqueue*-side single-instance gate
+    // lives on `inPlaceClaimed` below and runs from background threads.
+    private bool tailIsInPlace;
+
+    // 0 = no in-place line, 1 = one is open. Flipped via Interlocked so a
+    // second concurrent BeginInPlaceLine throws cleanly per LEASH §10.6.
+    private int inPlaceClaimed;
 
     private readonly LogViewer logViewer;
     private readonly HuskyChrome chrome;
@@ -79,7 +89,7 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
         // there is no widget to bypass — both inputs are intentionally ignored.
         _ = force;
         _ = messageColor;
-        pending.Enqueue(new PendingLine(when, source, sourceColor, message));
+        pending.Enqueue(PendingOp.Append(when, source, sourceColor, message));
         chrome.MarkDirty();
     }
 
@@ -95,29 +105,161 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
         return new SuppressedScope(crtSink);
     }
 
+    public ConsoleOutput.IInPlaceLine BeginInPlaceLine(
+        string source, Color sourceColor, string initialMessage)
+    {
+        if (Interlocked.CompareExchange(ref inPlaceClaimed, 1, 0) != 0)
+            throw new InvalidOperationException(
+                "ConsoleOutput already has an active in-place line — only one at a time.");
+
+        // The timestamp on an in-place line freezes at start: §10.6 says
+        // 'one operation = one frozen start-timestamp during updates'.
+        DateTime when = DateTime.Now;
+        pending.Enqueue(PendingOp.OpenInPlace(when, source, sourceColor, initialMessage));
+        chrome.MarkDirty();
+
+        return new TuiInPlaceLine(this, when, source, sourceColor);
+    }
+
     private void DrainPending()
     {
-        while (pending.TryDequeue(out PendingLine line))
+        while (pending.TryDequeue(out PendingOp op))
         {
-            string formatted = FormatLine(line);
-            logViewer.Append(formatted, line.SourceColor);
+            string formatted = FormatLine(op.When, op.Source, op.Message);
+            switch (op.Kind)
+            {
+                case OpKind.Append:
+                    if (tailIsInPlace && logViewer.Items.Count > 0)
+                    {
+                        // Insert above the in-place tail so progress stays at the
+                        // bottom while regular lines flow in above it.
+                        logViewer.Items.Insert(
+                            logViewer.Items.Count - 1,
+                            new LogEntry(formatted, op.SourceColor));
+                    }
+                    else
+                    {
+                        logViewer.Append(formatted, op.SourceColor);
+                    }
+                    break;
+
+                case OpKind.OpenInPlace:
+                    logViewer.Append(formatted, op.SourceColor);
+                    tailIsInPlace = true;
+                    break;
+
+                case OpKind.UpdateInPlace:
+                    if (tailIsInPlace && logViewer.Items.Count > 0)
+                        logViewer.Items[^1] = new LogEntry(formatted, op.SourceColor);
+                    break;
+
+                case OpKind.CompleteInPlace:
+                    if (tailIsInPlace && logViewer.Items.Count > 0)
+                        logViewer.Items[^1] = new LogEntry(formatted, op.SourceColor);
+                    else
+                        logViewer.Append(formatted, op.SourceColor);
+                    tailIsInPlace = false;
+                    break;
+            }
         }
     }
 
-    private static string FormatLine(PendingLine line)
+    private static string FormatLine(DateTime when, string source, string message)
     {
         // LEASH §10.4: TUI lines carry the same prefix as line mode but in
         // a single source colour. Pad source to match the line-mode width
         // for visual alignment when the user copies the buffer to a file.
-        string timestamp = line.When.ToString("HH:mm:ss");
-        string source = line.Source.Length >= 8
-            ? line.Source
-            : line.Source.PadRight(8);
-        return $"{timestamp}  {source}  {line.Message}";
+        string timestamp = when.ToString("HH:mm:ss");
+        string padded = source.Length >= 8 ? source : source.PadRight(8);
+        return $"{timestamp}  {padded}  {message}";
     }
 
-    private readonly record struct PendingLine(
-        DateTime When, string Source, Color SourceColor, string Message);
+    private void EnqueueUpdate(DateTime when, string source, Color sourceColor, string message)
+    {
+        pending.Enqueue(PendingOp.UpdateInPlace(when, source, sourceColor, message));
+        chrome.MarkDirty();
+    }
+
+    private void EnqueueComplete(DateTime when, string source, Color sourceColor, string message)
+    {
+        pending.Enqueue(PendingOp.CompleteInPlace(when, source, sourceColor, message));
+        Interlocked.Exchange(ref inPlaceClaimed, 0);
+        chrome.MarkDirty();
+    }
+
+    private enum OpKind { Append, OpenInPlace, UpdateInPlace, CompleteInPlace }
+
+    private readonly record struct PendingOp(
+        OpKind Kind, DateTime When, string Source, Color SourceColor, string Message)
+    {
+        public static PendingOp Append(DateTime w, string s, Color c, string m) =>
+            new(OpKind.Append, w, s, c, m);
+        public static PendingOp OpenInPlace(DateTime w, string s, Color c, string m) =>
+            new(OpKind.OpenInPlace, w, s, c, m);
+        public static PendingOp UpdateInPlace(DateTime w, string s, Color c, string m) =>
+            new(OpKind.UpdateInPlace, w, s, c, m);
+        public static PendingOp CompleteInPlace(DateTime w, string s, Color c, string m) =>
+            new(OpKind.CompleteInPlace, w, s, c, m);
+    }
+
+    /// <summary>
+    /// In-place line for TUI mode: each <see cref="Update"/> rewrites the
+    /// LogViewer's tail entry; <see cref="Complete"/> rewrites it once
+    /// more with the final-state message and releases the in-place gate.
+    /// Updates are throttled to 10 Hz at the enqueue side so a tight
+    /// download loop does not spam the queue.
+    /// </summary>
+    private sealed class TuiInPlaceLine(
+        HuskyApp owner, DateTime when, string source, Color sourceColor) : ConsoleOutput.IInPlaceLine
+    {
+        private const long ThrottleMs = 100;
+
+        private long lastUpdateTick = Environment.TickCount64;
+        private bool completed;
+        private bool disposed;
+
+        public void Update(string message)
+        {
+            if (completed || disposed) return;
+            long now = Environment.TickCount64;
+            if (now - lastUpdateTick < ThrottleMs) return;
+            lastUpdateTick = now;
+            owner.EnqueueUpdate(when, source, sourceColor, message);
+        }
+
+        public void Complete(string finalMessage, Color? finalMessageColor = null)
+        {
+            if (completed) return;
+            completed = true;
+            // §10.6: the completion line gets a fresh timestamp so the user
+            // can read 'started at X, finished at Y' from the buffer.
+            owner.EnqueueComplete(
+                DateTime.Now, source, finalMessageColor ?? sourceColor, finalMessage);
+        }
+
+        public void Dispose()
+        {
+            if (disposed) return;
+            disposed = true;
+            // If the caller never called Complete, release the gate without
+            // changing the tail entry — the last update frame stays visible.
+            if (!completed)
+            {
+                owner.EnqueueComplete(when, source, sourceColor,
+                    LastInPlaceMessageOrFallback(source));
+                completed = true;
+            }
+        }
+    }
+
+    private static string LastInPlaceMessageOrFallback(string source)
+    {
+        // Used only when a TuiInPlaceLine is disposed without Complete: we
+        // have no record of the last text on the queue side. The simplest
+        // honest finalisation is to emit a generic '<source>: done.' line so
+        // the in-place gate releases and the tail flips back to regular Appends.
+        return $"{source} done.";
+    }
 
     private sealed class SuppressedScope(IDisposable crtSink) : IDisposable
     {

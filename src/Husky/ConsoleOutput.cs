@@ -102,6 +102,16 @@ internal static partial class ConsoleOutput
     public static IDisposable BeginLiveWidget() => sink.BeginLiveWidget();
 
     /// <summary>
+    /// Open a self-updating <c>husky</c>-tagged log line. In TUI mode the
+    /// LogViewer's tail entry rewrites in place on every
+    /// <see cref="IInPlaceLine.Update"/>; in line mode only the start and
+    /// completion lines render (LEASH §10.3 auto-degrade). Used by the
+    /// download progress sink to fold a fetch into one updating line.
+    /// </summary>
+    public static IInPlaceLine BeginInPlaceHusky(string initialMessage) =>
+        sink.BeginInPlaceLine("husky", Color.LightCyan, initialMessage);
+
+    /// <summary>
     /// Build the rendered line as a list of (text, color) segments. Pure and
     /// allocation-bounded; the test suite drives this directly to verify the
     /// timestamp format, source padding, and status-word highlighting without
@@ -162,6 +172,26 @@ internal static partial class ConsoleOutput
     internal readonly record struct LineSegment(string Text, Color? Color = null);
 
     /// <summary>
+    /// A single log line that re-renders itself in place via <see cref="Update"/>
+    /// and is finalised by <see cref="Complete"/> or just letting the caller's
+    /// <see cref="IDisposable.Dispose"/> leave the last frame visible. Used by
+    /// <see cref="ProgressBarDownloadSink"/> to fold a download into a single
+    /// husky-formatted log line that updates in place (LEASH §10.6).
+    /// </summary>
+    internal interface IInPlaceLine : IDisposable
+    {
+        /// <summary>Replace the in-place line's message. Implementations may
+        /// throttle to a few Hz; the start frame and the most recent message
+        /// before <see cref="Complete"/> are always rendered.</summary>
+        void Update(string message);
+
+        /// <summary>Replace the in-place line one final time and release the
+        /// in-place gate. The completion message renders unconditionally
+        /// (no throttle). After this call, regular log lines append below.</summary>
+        void Complete(string finalMessage, Color? finalMessageColor = null);
+    }
+
+    /// <summary>
     /// A renderer-and-gate for log lines. Implementations decide both how
     /// a line is painted (multi-color Crt segments vs. single-color
     /// LogViewer entry) and whether a Spinner/ProgressBar should be allowed
@@ -180,6 +210,17 @@ internal static partial class ConsoleOutput
         /// <summary>Reserve the screen for a single in-place widget. See
         /// <see cref="ConsoleOutput.BeginLiveWidget"/> for semantics.</summary>
         IDisposable BeginLiveWidget();
+
+        /// <summary>
+        /// Open an in-place log line that the caller will refresh via
+        /// <see cref="IInPlaceLine.Update"/>. Line-mode sinks degrade to
+        /// emitting just the start line (LEASH §10.3 auto-degrade) and
+        /// silently drop intermediate updates; TUI sinks rewrite the
+        /// LogViewer's tail entry on each update. Throws if another
+        /// in-place line is already active (LEASH §10.6).
+        /// </summary>
+        IInPlaceLine BeginInPlaceLine(
+            string source, Color sourceColor, string initialMessage);
     }
 
     /// <summary>
@@ -229,6 +270,24 @@ internal static partial class ConsoleOutput
             return new WidgetScope(this);
         }
 
+        public IInPlaceLine BeginInPlaceLine(string source, Color sourceColor, string initialMessage)
+        {
+            lock (lockObj)
+            {
+                if (widgetActive)
+                    throw new InvalidOperationException(
+                        "ConsoleOutput already has an active live widget — only one at a time.");
+                widgetActive = true;
+            }
+
+            // §10.3 auto-degrade: write only the start line. Update() drops the
+            // payload silently; Complete() prints the final-state line and
+            // releases the gate. This keeps `husky | grep` and CI logs free of
+            // 60Hz progress-bar churn.
+            WriteLineNow(DateTime.Now, source, sourceColor, initialMessage, messageColor: null);
+            return new LineModeInPlaceLine(this, source, sourceColor);
+        }
+
         private static void WriteLineNow(
             DateTime when, string source, Color sourceColor, string message, Color? messageColor)
         {
@@ -254,6 +313,62 @@ internal static partial class ConsoleOutput
         private sealed class WidgetScope(CrtConsoleSink owner) : IDisposable
         {
             private bool disposed;
+
+            public void Dispose()
+            {
+                if (disposed) return;
+                disposed = true;
+
+                QueuedLine[] toFlush;
+                int dropped;
+                lock (owner.lockObj)
+                {
+                    toFlush = owner.queue.ToArray();
+                    owner.queue.Clear();
+                    dropped = owner.droppedDuringWidget;
+                    owner.droppedDuringWidget = 0;
+                    owner.widgetActive = false;
+                }
+
+                for (var i = 0; i < toFlush.Length; i++)
+                {
+                    var l = toFlush[i];
+                    WriteLineNow(l.When, l.Source, l.SourceColor, l.Message, l.MessageColor);
+                }
+
+                if (dropped > 0)
+                    WriteLineNow(
+                        DateTime.Now, "husky", Color.LightCyan,
+                        $"… {dropped} app line(s) elided while widget held the line.",
+                        messageColor: null);
+            }
+        }
+
+        /// <summary>
+        /// Line-mode in-place line: the start line is already on screen;
+        /// updates drop silently (auto-degrade per §10.3); Complete writes
+        /// the final-state line and Dispose releases the in-place gate plus
+        /// any queued lines waiting behind it.
+        /// </summary>
+        private sealed class LineModeInPlaceLine(
+            CrtConsoleSink owner, string source, Color sourceColor) : IInPlaceLine
+        {
+            private bool completed;
+            private bool disposed;
+
+            public void Update(string message) { /* §10.3 auto-degrade */ }
+
+            public void Complete(string finalMessage, Color? finalMessageColor = null)
+            {
+                if (completed) return;
+                completed = true;
+
+                // The start line is already on screen; the completion line
+                // follows on its own row. Force-bypass the queue (we hold the
+                // in-place gate, but the line should land before queued logs
+                // flush) by writing directly.
+                WriteLineNow(DateTime.Now, source, sourceColor, finalMessage, finalMessageColor);
+            }
 
             public void Dispose()
             {

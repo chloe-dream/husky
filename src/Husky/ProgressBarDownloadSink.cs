@@ -4,77 +4,83 @@ using Retro.Crt;
 namespace Husky;
 
 /// <summary>
-/// <see cref="IDownloadProgress"/> implementation that drives a
-/// <see cref="ProgressBar"/> inside a <see cref="ConsoleOutput.BeginLiveWidget"/>
-/// scope (LEASH §10.5 / §10.7). Long-lived: one instance per launcher
-/// process; each download reuses the sink — fresh widget + bar per
-/// <see cref="OnStarted"/>, torn down in <see cref="OnFinished"/>. After
-/// finish, a normal-format husky log line carries the byte count and
-/// duration. Disposing the sink itself releases any half-started
-/// widget+bar (the safety net for downloads that throw before
-/// <see cref="OnFinished"/>).
+/// <see cref="IDownloadProgress"/> implementation that folds a download
+/// into a single self-updating <c>husky</c>-tagged log line via
+/// <see cref="ConsoleOutput.BeginInPlaceHusky"/> (LEASH §10.6). The
+/// active sink picks the rendering: TUI mode rewrites the LogViewer's
+/// tail entry on every <see cref="OnAdvanced"/>; line mode degrades to
+/// a start line and a final summary line (LEASH §10.3) — no cursor
+/// magic, pipe-friendly. Long-lived: one instance per launcher process,
+/// each download reuses the sink. Disposing the sink itself releases
+/// any half-started in-place line (the safety net for downloads that
+/// throw before <see cref="OnFinished"/>).
 /// </summary>
 internal sealed class ProgressBarDownloadSink : IDownloadProgress, IDisposable
 {
     private const int BarWidth = 30;
 
-    private IDisposable? widgetScope;
-    private ProgressBar? bar;
+    private ConsoleOutput.IInPlaceLine? line;
     private long totalKnown;
 
     /// <inheritdoc />
     public void OnStarted(long? totalBytes)
     {
         // Defensive: a previous download that crashed before OnFinished may
-        // have left state behind. Reset before opening a new scope.
+        // have left state behind. Reset before opening a new line.
         ResetUnsafe();
 
-        widgetScope = ConsoleOutput.BeginLiveWidget();
+        totalKnown = totalBytes is > 0 ? totalBytes.Value : 0;
 
-        // ProgressBar needs a positive total; when Content-Length is missing
-        // we fall back to a one-cell bar that simply pings to "100%" once
-        // the stream completes. The summary log line carries the real size.
-        long total = totalBytes is > 0 ? totalBytes.Value : 1;
-        totalKnown = totalBytes ?? 0;
-
-        bar = ProgressBar.Start(
-            total: total,
-            width: BarWidth,
-            label: "fetching",
-            color: Color.LightCyan);
+        line = ConsoleOutput.BeginInPlaceHusky(
+            BuildBarMessage(received: 0, total: totalKnown));
     }
 
     /// <inheritdoc />
-    public void OnAdvanced(long bytesReceived) => bar?.Set(bytesReceived);
+    public void OnAdvanced(long bytesReceived) =>
+        line?.Update(BuildBarMessage(bytesReceived, totalKnown));
 
     /// <inheritdoc />
     public void OnFinished(long bytesReceived, TimeSpan duration)
     {
-        bar?.Set(totalKnown > 0 ? totalKnown : 1);
-        bar?.Dispose();
-        bar = null;
+        if (line is null) return;
 
-        widgetScope?.Dispose();
-        widgetScope = null;
-
-        ConsoleOutput.Husky(
-            $"fetched {HumanBytes.Format(bytesReceived)} in {FormatDuration(duration)}.");
+        line.Complete(
+            $"fetched {HumanBytes.Format(bytesReceived)} in {FormatDuration(duration)}.",
+            Color.LightGreen);
+        line.Dispose();
+        line = null;
     }
 
     /// <summary>
-    /// Releases any active bar and live-widget scope. Safe to call
-    /// multiple times and at any point in the sink's lifecycle —
-    /// the safety net for downloads that throw between
-    /// <see cref="OnStarted"/> and <see cref="OnFinished"/>.
+    /// Releases any active in-place line. Safe to call multiple times and
+    /// at any point in the sink's lifecycle — the safety net for downloads
+    /// that throw between <see cref="OnStarted"/> and <see cref="OnFinished"/>.
     /// </summary>
     public void Dispose() => ResetUnsafe();
 
     private void ResetUnsafe()
     {
-        bar?.Dispose();
-        bar = null;
-        widgetScope?.Dispose();
-        widgetScope = null;
+        line?.Dispose();
+        line = null;
+    }
+
+    private static string BuildBarMessage(long received, long total)
+    {
+        if (total <= 0)
+        {
+            // Unknown total: show received bytes only with an indeterminate
+            // marker. Still useful to confirm the stream is moving.
+            return $"fetching … {HumanBytes.Format(received)}";
+        }
+
+        double fraction = Math.Clamp((double)received / total, 0.0, 1.0);
+        int filledCells = (int)Math.Round(fraction * BarWidth);
+        int emptyCells = BarWidth - filledCells;
+        int percent = (int)Math.Round(fraction * 100.0);
+
+        return
+            $"fetching {new string('█', filledCells)}{new string('░', emptyCells)} {percent,3}%  " +
+            $"{HumanBytes.Format(received)} / {HumanBytes.Format(total)}";
     }
 
     private static string FormatDuration(TimeSpan d) =>
