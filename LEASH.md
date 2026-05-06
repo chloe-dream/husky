@@ -997,7 +997,7 @@ The default rendering on an interactive terminal.
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│ 🐺 husky v0.3.2          umbrella-bot v1.4.2     healthy │  header (1 row)
+│ husky v0.3.2          umbrella-bot v1.4.2     healthy │  header (1 row)
 ├──────────────────────────────────────────────────────────┤
 │ 13:47:03  husky    sniffing for updates… up to date.     │
 │ 13:47:08  app      worker started, 12 guilds connected   │
@@ -1009,7 +1009,7 @@ The default rendering on an interactive terminal.
 └──────────────────────────────────────────────────────────┘
 ```
 
-- **Header** (1 row, top): `🐺 husky vX.Y.Z` left-aligned,
+- **Header** (1 row, top): `husky vX.Y.Z` left-aligned,
   `<appName> v<appVersion>` centered, current health
   (`healthy`/`degraded`/`unhealthy`) right-aligned. Pre-handshake
   the center is `(starting…)`; while crash-restart-paused, the right
