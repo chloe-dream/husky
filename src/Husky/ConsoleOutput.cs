@@ -112,6 +112,23 @@ internal static partial class ConsoleOutput
         sink.BeginInPlaceLine("husky", Color.LightCyan, initialMessage);
 
     /// <summary>
+    /// Update the TUI header with the currently-attached app's name and
+    /// version. Pass <c>null</c> for either to clear (e.g., when the
+    /// session ends or a crash-restart is pending). In line mode this is
+    /// a no-op — the line-mode banner doesn't carry per-app info.
+    /// </summary>
+    public static void SetAppInfo(string? appName, string? appVersion) =>
+        sink.SetAppInfo(appName, appVersion);
+
+    /// <summary>
+    /// Update the TUI header's right-aligned health status (typically the
+    /// most recent <c>pong.status</c>: <c>healthy</c> / <c>degraded</c> /
+    /// <c>unhealthy</c>). Pass <c>null</c> to clear (e.g., between
+    /// sessions while waiting for the first pong). No-op in line mode.
+    /// </summary>
+    public static void SetHealth(string? status) => sink.SetHealth(status);
+
+    /// <summary>
     /// Build the rendered line as a list of (text, color) segments. Pure and
     /// allocation-bounded; the test suite drives this directly to verify the
     /// timestamp format, source padding, and status-word highlighting without
@@ -221,6 +238,12 @@ internal static partial class ConsoleOutput
         /// </summary>
         IInPlaceLine BeginInPlaceLine(
             string source, Color sourceColor, string initialMessage);
+
+        /// <summary>Set the header's app-name + version slot (TUI only).</summary>
+        void SetAppInfo(string? appName, string? appVersion);
+
+        /// <summary>Set the header's health slot (TUI only).</summary>
+        void SetHealth(string? status);
     }
 
     /// <summary>
@@ -287,6 +310,11 @@ internal static partial class ConsoleOutput
             WriteLineNow(DateTime.Now, source, sourceColor, initialMessage, messageColor: null);
             return new LineModeInPlaceLine(this, source, sourceColor);
         }
+
+        // Header slots are TUI-only. Line mode's banner already carries the
+        // launcher branding and there is no header band to update.
+        public void SetAppInfo(string? appName, string? appVersion) { _ = appName; _ = appVersion; }
+        public void SetHealth(string? status) { _ = status; }
 
         private static void WriteLineNow(
             DateTime when, string source, Color sourceColor, string message, Color? messageColor)

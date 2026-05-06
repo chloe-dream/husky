@@ -479,9 +479,14 @@ internal sealed class LauncherRuntime(
         AppSession session = await sessionLauncher.StartAsync(OnSessionDeclaredDead, ct).ConfigureAwait(false);
         session.PipeServer.OnUpdateNowRequested = OnUpdateNowFromApp;
         session.PipeServer.OnUpdateCheckRequested = RefreshUpdateStatusFromAppAsync;
+        session.PipeServer.OnHealthChanged = ConsoleOutput.SetHealth;
         // Each new session re-announces its update state, so a fresh hello
         // resets the §3.5.11 "once per version" guard.
         lastPushedManualVersion = null;
+        // §10.4 header: surface the new app's identity immediately; clear
+        // the health slot until the first pong arrives.
+        ConsoleOutput.SetAppInfo(session.ConnectedApp.Name, session.ConnectedApp.Version);
+        ConsoleOutput.SetHealth(null);
         SetCurrentSession(session);
         return session;
     }
@@ -568,6 +573,10 @@ internal sealed class LauncherRuntime(
             toDispose = currentSession;
             currentSession = null;
         }
+        // Header reverts to its pre-attach state so the right slot reads
+        // '(starting…)' until the next session's hello lands.
+        ConsoleOutput.SetAppInfo(null, null);
+        ConsoleOutput.SetHealth(null);
         if (toDispose is not null)
             await toDispose.DisposeAsync().ConfigureAwait(false);
     }

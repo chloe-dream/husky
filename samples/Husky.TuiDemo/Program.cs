@@ -74,10 +74,13 @@ static async Task BootSequenceAsync(CancellationToken ct)
     await Task.Delay(200, ct).ConfigureAwait(false);
     ConsoleOutput.Husky("starting demo-app v1.4.2");
     await Task.Delay(400, ct).ConfigureAwait(false);
+    // Header populates the moment the synthetic 'hello' lands.
+    ConsoleOutput.SetAppInfo("demo-app", "1.4.2");
     ConsoleOutput.AppOut("demo-app: bootstrap complete");
     await Task.Delay(200, ct).ConfigureAwait(false);
     ConsoleOutput.AppOut("demo-app: connected to 12 guilds");
     await Task.Delay(200, ct).ConfigureAwait(false);
+    ConsoleOutput.SetHealth("healthy");
     ConsoleOutput.Husky("demo-app v1.4.2 is up.");
 }
 
@@ -108,6 +111,7 @@ static async Task ActivityLoopAsync(CancellationToken ct)
                 ConsoleOutput.AppErr("demo-app: WARN connection reset, retrying");
                 break;
             case 5:
+                ConsoleOutput.SetHealth("degraded");
                 ConsoleOutput.Husky("pong: status=degraded queue=205 guilds=42");
                 break;
             case 6:
@@ -120,6 +124,7 @@ static async Task ActivityLoopAsync(CancellationToken ct)
                 // Growl escalation — force:true triggers the bell in line
                 // mode; in TUI it just appears at the tail like everything
                 // else but Crt.Bell still fires (audible).
+                ConsoleOutput.SetHealth("unhealthy");
                 ConsoleOutput.Husky(
                     "growling — no pong in 30s. probing.",
                     force: true);
@@ -128,6 +133,7 @@ static async Task ActivityLoopAsync(CancellationToken ct)
                 ConsoleOutput.AppOut("demo-app: tick — queue=4 guilds=42");
                 break;
             case 9:
+                ConsoleOutput.SetHealth("healthy");
                 ConsoleOutput.Husky("pong: status=healthy queue=4 guilds=42");
                 break;
             case 10:
@@ -171,6 +177,14 @@ static async Task FakeShutdownAsync(CancellationToken ct)
     spinner.UpdateLabel("grace period (+10s)");
     await Task.Delay(1500, ct).ConfigureAwait(false);
     spinner.Complete("app sat down.", Color.LightGreen);
+    // Session ended — header reverts to the pre-attach state until the
+    // 'fresh hello' lands a few hundred ms later.
+    ConsoleOutput.SetAppInfo(null, null);
+    ConsoleOutput.SetHealth(null);
+    await Task.Delay(800, ct).ConfigureAwait(false);
+    ConsoleOutput.SetAppInfo("demo-app", "0.4.0");
+    ConsoleOutput.SetHealth("healthy");
+    ConsoleOutput.Husky("demo-app v0.4.0 is up.");
     await Task.Delay(400, ct).ConfigureAwait(false);
 }
 

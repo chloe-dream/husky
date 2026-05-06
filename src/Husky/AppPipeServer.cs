@@ -61,6 +61,14 @@ internal sealed class AppPipeServer : IAsyncDisposable
     public Action<string>? OnCapabilityWarning { get; set; }
 
     /// <summary>
+    /// Fires when a <c>pong</c> arrives from the hosted app, carrying the
+    /// freshly observed health status (<c>healthy</c> / <c>degraded</c> /
+    /// <c>unhealthy</c>). The TUI header subscribes to this so the right
+    /// slot reflects live state; line mode ignores it.
+    /// </summary>
+    public Action<string>? OnHealthChanged { get; set; }
+
+    /// <summary>
     /// Fires when the hosted app sends <c>update-check</c>. The launcher is
     /// expected to poll the source synchronously, update
     /// <see cref="CurrentUpdateStatus"/>, and return the fresh payload to
@@ -315,6 +323,7 @@ internal sealed class AppPipeServer : IAsyncDisposable
                     case MessageTypes.Pong
                         when envelope.ReplyTo is { Length: > 0 } pongReplyTo
                              && pendingPings.TryGetValue(pongReplyTo, out TaskCompletionSource? pongTcs):
+                        ProcessPongHealth(envelope);
                         pongTcs.TrySetResult();
                         break;
 
@@ -335,6 +344,26 @@ internal sealed class AppPipeServer : IAsyncDisposable
             }
         }
         catch (OperationCanceledException) { /* normal */ }
+    }
+
+    private void ProcessPongHealth(MessageEnvelope envelope)
+    {
+        if (OnHealthChanged is not { } callback) return;
+
+        PongPayload? payload;
+        try
+        {
+            payload = envelope.Data?.Deserialize(HuskyJsonContext.Default.PongPayload);
+        }
+        catch
+        {
+            return;
+        }
+        if (payload?.Status is { Length: > 0 } status)
+        {
+            try { callback(status); }
+            catch { /* subscriber exceptions don't take down the pipe loop */ }
+        }
     }
 
     private async Task HandleUpdateCheckAsync(MessageEnvelope request, CancellationToken ct)

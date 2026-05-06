@@ -76,6 +76,31 @@ public sealed class ConsoleOutputSinkTests
     }
 
     [Fact]
+    public void SetAppInfo_and_SetHealth_route_to_the_active_sink()
+    {
+        var fake = new RecordingSink();
+        try
+        {
+            ConsoleOutput.SetSink(fake);
+
+            ConsoleOutput.SetAppInfo("umbrella-bot", "1.4.2");
+            ConsoleOutput.SetHealth("healthy");
+            ConsoleOutput.SetHealth("degraded");
+            ConsoleOutput.SetAppInfo(null, null);
+
+            Assert.Equal(2, fake.AppInfoUpdates);
+            Assert.Equal(2, fake.HealthUpdates);
+            Assert.Null(fake.AppName);
+            Assert.Null(fake.AppVersion);
+            Assert.Equal("degraded", fake.Health);
+        }
+        finally
+        {
+            ConsoleOutput.ResetSink();
+        }
+    }
+
+    [Fact]
     public void ResetSink_restores_the_default_Crt_sink()
     {
         var fake = new RecordingSink();
@@ -112,6 +137,25 @@ public sealed class ConsoleOutputSinkTests
             var entry = new RecordedInPlace(source, sourceColor, initialMessage);
             InPlaceLines.Add(entry);
             return entry;
+        }
+
+        public string? AppName { get; private set; }
+        public string? AppVersion { get; private set; }
+        public string? Health { get; private set; }
+        public int AppInfoUpdates { get; private set; }
+        public int HealthUpdates { get; private set; }
+
+        public void SetAppInfo(string? appName, string? appVersion)
+        {
+            AppName = appName;
+            AppVersion = appVersion;
+            AppInfoUpdates++;
+        }
+
+        public void SetHealth(string? status)
+        {
+            Health = status;
+            HealthUpdates++;
         }
 
         private sealed class NullScope : IDisposable

@@ -18,6 +18,7 @@ internal sealed class HuskyChrome : Container
     private readonly Action drainPending;
     private readonly Action onExitRequested;
     private readonly StackPanel body;
+    private readonly HeaderView header;
 
     public HuskyChrome(
         string launcherVersion,
@@ -33,7 +34,7 @@ internal sealed class HuskyChrome : Container
         this.drainPending = drainPending;
         this.onExitRequested = onExitRequested;
 
-        var header = new HeaderView(launcherVersion);
+        header = new HeaderView(launcherVersion);
         var actionBar = new ActionBarView();
 
         body = new StackPanel
@@ -43,6 +44,20 @@ internal sealed class HuskyChrome : Container
             Children    = { header, log, actionBar },
         };
         Children.Add(body);
+    }
+
+    /// <summary>Update the header's app-info slot. Safe from any thread.</summary>
+    public void SetAppInfo(string? appName, string? appVersion)
+    {
+        header.SetAppInfo(appName, appVersion);
+        MarkDirty();
+    }
+
+    /// <summary>Update the header's health slot. Safe from any thread.</summary>
+    public void SetHealth(string? status)
+    {
+        header.SetHealth(status);
+        MarkDirty();
     }
 
     protected override void ArrangeChildren()
@@ -73,24 +88,99 @@ internal sealed class HuskyChrome : Container
     }
 
     /// <summary>
-    /// 1-row banner at the top: launcher branding left-aligned. App name +
-    /// version and live health move in here in later phases.
+    /// 1-row banner at the top: launcher branding left-aligned, app
+    /// name+version centered (or '(starting…)' before the handshake),
+    /// health status right-aligned in its semantic colour. State setters
+    /// are thread-safe via a tiny lock; the UI thread snapshots under the
+    /// same lock during <see cref="OnDraw"/>.
     /// </summary>
     private sealed class HeaderView(string launcherVersion) : View
     {
+        private readonly object stateLock = new();
+        private string? appName;
+        private string? appVersion;
+        private string? health;
+
+        public void SetAppInfo(string? name, string? version)
+        {
+            lock (stateLock) { appName = name; appVersion = version; }
+            MarkDirty();
+        }
+
+        public void SetHealth(string? status)
+        {
+            lock (stateLock) { health = status; }
+            MarkDirty();
+        }
+
         public override void OnDraw(ScreenBuffer screen)
         {
             var b = Bounds;
             if (b.Width <= 0 || b.Height <= 0) return;
 
+            string? localName, localVer, localHealth;
+            lock (stateLock)
+            {
+                localName = appName;
+                localVer = appVersion;
+                localHealth = health;
+            }
+
             screen.FillRect(b.X, b.Y, b.Width, b.Height,
                 new Cell(' ', Color.Black, Color.LightCyan));
 
-            string label = $" husky v{launcherVersion}";
-            if (b.Width >= label.Length)
-                screen.PutString(b.X, b.Y, label.AsSpan(),
-                    Color.Black, Color.LightCyan, CellAttrs.Bold);
+            // Left: launcher branding.
+            string left = $" husky v{launcherVersion}";
+            int leftLen = Math.Min(left.Length, b.Width);
+            screen.PutString(b.X, b.Y, left.AsSpan(0, leftLen),
+                Color.Black, Color.LightCyan, CellAttrs.Bold);
+
+            // Right: health status, or a status hint while no app is attached.
+            (string text, Color color) right = ResolveRightSlot(localName, localHealth);
+            int rightLen = Math.Min(right.text.Length, b.Width - leftLen);
+            int rightX = b.X + b.Width - rightLen;
+            if (rightLen > 0 && rightX >= b.X + leftLen)
+            {
+                screen.PutString(rightX, b.Y, right.text.AsSpan(0, rightLen),
+                    right.color, Color.LightCyan, CellAttrs.Bold);
+            }
+
+            // Middle: app name + version, centered between the left and right
+            // slots. Drop entirely when the slot can't fit the full text — a
+            // truncated app-name is worse than no name.
+            if (localName is not null)
+            {
+                string mid = localVer is null ? localName : $"{localName} v{localVer}";
+                int leftEnd = b.X + leftLen;
+                int rightStart = rightLen > 0 ? rightX : b.X + b.Width;
+                int slotStart = leftEnd + 1;
+                int slotEnd = rightStart - 1;
+                int slotWidth = slotEnd - slotStart;
+                if (slotWidth >= mid.Length)
+                {
+                    int midX = slotStart + (slotWidth - mid.Length) / 2;
+                    screen.PutString(midX, b.Y, mid.AsSpan(),
+                        Color.Black, Color.LightCyan, CellAttrs.Bold);
+                }
+            }
         }
+
+        private static (string text, Color color) ResolveRightSlot(string? name, string? health)
+        {
+            if (health is not null)
+                return ($" {health} ", HealthColour(health));
+            if (name is null)
+                return (" (starting…) ", Color.DarkGray);
+            return (string.Empty, Color.Black);
+        }
+
+        private static Color HealthColour(string status) => status switch
+        {
+            "healthy"   => Color.LightGreen,
+            "degraded"  => Color.Yellow,
+            "unhealthy" => Color.LightRed,
+            _           => Color.Black,
+        };
     }
 
     /// <summary>

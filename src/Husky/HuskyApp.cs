@@ -93,6 +93,11 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
         chrome.MarkDirty();
     }
 
+    public void SetAppInfo(string? appName, string? appVersion) =>
+        chrome.SetAppInfo(appName, appVersion);
+
+    public void SetHealth(string? status) => chrome.SetHealth(status);
+
     public IDisposable BeginLiveWidget()
     {
         // No cursor-sharing in TUI mode. Caller's Spinner.Show/ProgressBar.Start
