@@ -435,6 +435,16 @@ internal sealed class LauncherRuntime(
         _ = Task.Run(() => TriggerUpdateAsync(snapshot, pollingToken));
     }
 
+    /// <summary>
+    /// External request — equivalent to receiving an <c>update-now</c>
+    /// message from the hosted app (LEASH §3.5.12). Bound to the TUI's
+    /// <c>[u]</c> button / hotkey so the human running Husky can trigger
+    /// the cached update without round-tripping through the app's pipe.
+    /// Same semantics as the wire-driven path: if no update is cached,
+    /// a husky log line surfaces and nothing else happens.
+    /// </summary>
+    public void RequestUpdateNow() => OnUpdateNowFromApp();
+
     private async Task<string> BootstrapAsync(UpdateInfo seed, CancellationToken ct)
     {
         ConsoleOutput.Husky($"new version found: v{seed.Version}");

@@ -201,15 +201,7 @@ if (!Console.IsOutputRedirected)
     {
         tuiApp = new HuskyApp(
             launcherVersion,
-            onUpdateRequested: () =>
-            {
-                // C-6 wires this to LauncherRuntime.RequestUpdateNow();
-                // until then, the [u] button just announces itself so users
-                // know it registered the click without any side-effect.
-                ConsoleOutput.Husky(
-                    "[u] update now — not yet wired (C-6 follow-up).",
-                    messageColor: Color.Yellow);
-            },
+            onUpdateRequested: runtime.RequestUpdateNow,
             onExitRequested: () =>
             {
                 try { gracefulTrigger.Cancel(); }
