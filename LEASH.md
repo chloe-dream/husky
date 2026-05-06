@@ -931,8 +931,8 @@ support), Husky falls back to line mode without complaining.
 ### 10.2 Libraries
 
 - **[Retro.Crt](https://github.com/chloe-dream/retro-crt)** (NuGet,
-  **0.6.0+**) for color, screen buffer, input parsing, banner.
-- **Retro.Crt.Tui** (NuGet, **0.1.0+**) for the TUI layer:
+  **0.7.0+**) for color, screen buffer, input parsing, banner.
+- **Retro.Crt.Tui** (NuGet, **0.1.1+**) for the TUI layer:
   `Application`, `LogViewer`, `Button`, `StackPanel`, `Layout.Dock`.
   Loaded only in TUI mode but referenced unconditionally — the
   package is small and trim/AOT-clean.
