@@ -24,6 +24,12 @@ internal sealed class LauncherRuntime(
     private TaskCompletionSource sessionStartedTrigger = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private UpdateInfo? cachedUpdate;
     private CancellationToken pollingToken;
+    // Tracks which version we've already pushed an unsolicited update-available
+    // for in manual mode. LEASH §3.5.11: "once per discovered version" — so
+    // the polling loop must not re-push the same version on every tick.
+    // Cleared when an update applies, when a new session starts, or when the
+    // discovered version changes.
+    private string? lastPushedManualVersion;
 
     public async Task<int> RunAsync(CancellationToken graceful, CancellationToken hardKill)
     {
@@ -293,6 +299,10 @@ internal sealed class LauncherRuntime(
         // Manual mode: notify the app and wait for update-now (LEASH §3.5.11).
         if (IsSessionInManualMode(session))
         {
+            // §3.5.11 says "once per discovered version" — skip the push if
+            // we've already announced this exact version on this session.
+            if (lastPushedManualVersion == update.Version) return;
+
             ConsoleOutput.Husky("manual mode — notifying app, waiting for trigger.");
             try
             {
@@ -302,6 +312,7 @@ internal sealed class LauncherRuntime(
                         NewVersion: update.Version,
                         DownloadSizeBytes: null),
                     ct).ConfigureAwait(false);
+                lastPushedManualVersion = update.Version;
             }
             catch (OperationCanceledException) { return; }
             catch (Exception ex)
@@ -326,6 +337,7 @@ internal sealed class LauncherRuntime(
                 ct: ct).ConfigureAwait(false);
             restartPolicy.Reset();
             cachedUpdate = null;
+            lastPushedManualVersion = null;
             ConsoleOutput.Husky($"update succeeded — now on v{update.Version}");
             mark.TrySetResult(true);
         }
@@ -471,6 +483,9 @@ internal sealed class LauncherRuntime(
         AppSession session = await sessionLauncher.StartAsync(OnSessionDeclaredDead, ct).ConfigureAwait(false);
         session.PipeServer.OnUpdateNowRequested = OnUpdateNowFromApp;
         session.PipeServer.OnUpdateCheckRequested = RefreshUpdateStatusFromAppAsync;
+        // Each new session re-announces its update state, so a fresh hello
+        // resets the §3.5.11 "once per version" guard.
+        lastPushedManualVersion = null;
         SetCurrentSession(session);
         return session;
     }
