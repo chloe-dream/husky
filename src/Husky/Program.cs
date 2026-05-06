@@ -9,11 +9,10 @@ using Retro.Crt;
 Console.OutputEncoding = Encoding.UTF8;
 
 string launcherVersion = GetLauncherVersion();
-// LEASH §10.3: banner is line-mode-only — in TUI mode the header band
-// carries the branding. Use the same TTY predictor as the mode selector
-// below so the two stay in sync.
-if (Console.IsOutputRedirected)
-    Husky.Banner.Render(launcherVersion);
+// Banner renders before any TUI takeover so the husky logo bookends the
+// session: visible at startup in both modes, and brought back when the
+// alt-screen restores on exit (LEASH §10.3).
+Husky.Banner.Render(launcherVersion);
 
 // Step 1 — parse CLI flags (LEASH §5.2.1). Resolves --dir and the
 // synthetic source block before we touch any file.

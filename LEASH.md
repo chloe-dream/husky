@@ -952,9 +952,10 @@ The fallback used when stdout is redirected.
 On startup: Husky ASCII logo + tagline. Stored as a `string[]` in
 the launcher and rendered with `Retro.Crt.Banner.Gradient` — colour
 interpolated per line from a cool ice-blue at the top to a brighter
-cyan at the bottom. The banner is **only** drawn in line mode; in
-TUI mode the header band carries the branding and the banner is
-omitted.
+cyan at the bottom. The banner renders before mode selection in
+**both** line and TUI mode so the husky portrait bookends every
+session: in TUI mode it briefly precedes the alt-screen takeover
+and is restored when the alt-screen closes on exit.
 
 ```
   <husky-ascii-art (rendered with ice-blue→cyan vertical gradient)>
