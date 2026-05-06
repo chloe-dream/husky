@@ -1006,7 +1006,7 @@ The default rendering on an interactive terminal.
 │ 13:47:15  husky    manual mode — waiting for trigger.    │  (star-sized)
 │ …                                                     ▓  │
 ├──────────────────────────────────────────────────────────┤
-│ [c] copy logs  [u] update now  [x] exit       ▲▼ scroll │  action bar (1 row)
+│ c copy logs · u update now · x exit                      │  action bar (1 row)
 └──────────────────────────────────────────────────────────┘
 ```
 
@@ -1021,8 +1021,14 @@ The default rendering on an interactive terminal.
   source; mid-line styling (status-word highlights) is **not**
   applied here — only in line mode. Lines never wrap; overflow is
   clipped with a `…` marker at the right edge.
-- **Action bar** (1 row, bottom): three buttons plus a scroll-pos
-  hint on the right.
+- **Action bar** (1 row, bottom): three commands rendered as
+  dot-separated hotkey hints (`c copy logs · u update now · x exit`).
+  The hotkey letter is in the launcher's accent colour and bold; the
+  label is plain on the bar's dark background; the middle-dot
+  separator picks up the label colour. No focusable button widgets —
+  every command has a single-letter shortcut, so Tab cycling adds
+  nothing here. Activation runs through the chrome's global hotkey
+  routing.
 
 #### Hotkeys
 

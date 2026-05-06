@@ -215,78 +215,75 @@ internal sealed class HuskyChrome : Container
     }
 
     /// <summary>
-    /// 1-row strip at the bottom holding three focusable buttons:
-    /// <c>[c] copy logs</c>, <c>[u] update now</c>, <c>[x] exit</c>.
-    /// The bracketed letters double as global hotkeys handled by the
-    /// chrome's <see cref="HuskyChrome.OnKey"/>; Tab/Shift+Tab cycles
-    /// focus through them; Enter activates the focused button.
+    /// 1-row strip at the bottom showing the three commands as
+    /// dot-separated hotkey hints (<c>c copy logs · u update now · x exit</c>).
+    /// The hotkey letter is in the launcher's accent colour and bold; the
+    /// label is plain on the bar's dark background; the middle-dot
+    /// separator picks up the label colour. Activation goes through
+    /// <see cref="HuskyChrome.OnKey"/>'s global hotkeys — there are no
+    /// focusable button widgets here, since Tab cycling adds nothing
+    /// when every command already has a single-letter shortcut.
     /// </summary>
-    private sealed class ActionBar : Container
+    private sealed class ActionBar(Action onCopy, Action onUpdate, Action onExit) : View
     {
-        // Cell widths chosen to fit each label plus one cell of padding on
-        // either side; the focus highlight inverts the whole rectangle so
-        // the gap matters visually.
-        private const int CopyWidth   = 16; // " [c] copy logs  "
-        private const int UpdateWidth = 18; // " [u] update now  "
-        private const int ExitWidth   = 11; // " [x] exit  "
-        private const int Gap         = 2;
-
-        private readonly Button copyButton;
-        private readonly Button updateButton;
-        private readonly Button exitButton;
-
-        public ActionBar(Action onCopy, Action onUpdate, Action onExit)
-        {
-            copyButton = new Button(" [c] copy logs ")
-            {
-                Foreground = Color.LightGray,
-                Background = Color.DarkGray,
-            };
-            copyButton.Click += () => onCopy();
-
-            updateButton = new Button(" [u] update now ")
-            {
-                Foreground = Color.LightGray,
-                Background = Color.DarkGray,
-            };
-            updateButton.Click += () => onUpdate();
-
-            exitButton = new Button(" [x] exit ")
-            {
-                Foreground = Color.LightGray,
-                Background = Color.DarkGray,
-            };
-            exitButton.Click += () => onExit();
-
-            Children.Add(copyButton);
-            Children.Add(updateButton);
-            Children.Add(exitButton);
-        }
-
-        protected override void ArrangeChildren()
-        {
-            var b = Bounds;
-            // Left-aligned with one-cell margin and gaps; if the row is too
-            // narrow, the buttons clip off the right edge — preferable to
-            // truncating the labels themselves.
-            int x = b.X + 1;
-            copyButton.Bounds = new Rect(x, b.Y, CopyWidth, 1);
-            x += CopyWidth + Gap;
-            updateButton.Bounds = new Rect(x, b.Y, UpdateWidth, 1);
-            x += UpdateWidth + Gap;
-            exitButton.Bounds = new Rect(x, b.Y, ExitWidth, 1);
-        }
+        // Suppress 'declared but unused' — these stay assigned in case a
+        // future commit adds OnMouse hit-test handling per region.
+        private readonly Action onCopy = onCopy;
+        private readonly Action onUpdate = onUpdate;
+        private readonly Action onExit = onExit;
 
         public override void OnDraw(ScreenBuffer screen)
         {
-            // Fill the strip first so the gaps between buttons read as part
-            // of the bar rather than as terminal-default empty cells.
-            screen.FillRect(Bounds.X, Bounds.Y, Bounds.Width, Bounds.Height,
+            var b = Bounds;
+            if (b.Width <= 0 || b.Height <= 0) return;
+
+            screen.FillRect(b.X, b.Y, b.Width, b.Height,
                 new Cell(' ', Color.LightGray, Color.DarkGray));
 
-            ArrangeChildren();
-            for (var i = 0; i < Children.Count; i++)
-                Children[i].OnDraw(screen);
+            int x = b.X + 1;
+            int max = b.X + b.Width;
+            x = DrawCommand(screen, x, b.Y, max, "c", "copy logs");
+            x = DrawSeparator(screen, x, b.Y, max);
+            x = DrawCommand(screen, x, b.Y, max, "u", "update now");
+            x = DrawSeparator(screen, x, b.Y, max);
+            DrawCommand(screen, x, b.Y, max, "x", "exit");
+
+            // Reference the action fields so the analyser doesn't flag them
+            // as unused before the OnMouse hit-test work lands.
+            _ = onCopy; _ = onUpdate; _ = onExit;
+        }
+
+        private static int DrawCommand(
+            ScreenBuffer screen, int x, int y, int max, string hotkey, string label)
+        {
+            int hkLen = Math.Min(hotkey.Length, max - x);
+            if (hkLen > 0)
+                screen.PutString(x, y, hotkey.AsSpan(0, hkLen),
+                    Color.LightCyan, Color.DarkGray, CellAttrs.Bold);
+            x += hkLen;
+
+            if (x < max)
+            {
+                screen.PutString(x, y, " ".AsSpan(), Color.LightGray, Color.DarkGray);
+                x += 1;
+            }
+
+            int lblLen = Math.Min(label.Length, max - x);
+            if (lblLen > 0)
+                screen.PutString(x, y, label.AsSpan(0, lblLen),
+                    Color.LightGray, Color.DarkGray);
+            return x + lblLen;
+        }
+
+        private static int DrawSeparator(ScreenBuffer screen, int x, int y, int max)
+        {
+            // U+00B7 MIDDLE DOT, padded by a space on each side.
+            const string Sep = " · ";
+            int len = Math.Min(Sep.Length, max - x);
+            if (len > 0)
+                screen.PutString(x, y, Sep.AsSpan(0, len),
+                    Color.LightGray, Color.DarkGray);
+            return x + len;
         }
     }
 }
