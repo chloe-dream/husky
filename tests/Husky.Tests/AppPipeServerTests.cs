@@ -46,7 +46,6 @@ public sealed class AppPipeServerTests
 
         Assert.NotNull(payload.Capabilities);
         Assert.Contains(Capabilities.ManualUpdates, payload.Capabilities!);
-        Assert.Contains(Capabilities.ShutdownProgress, payload.Capabilities!);
 
         await accept;
     }

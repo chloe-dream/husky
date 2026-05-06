@@ -169,7 +169,7 @@ First message after pipe connect. App sends its identity, declares its capabilit
     "appVersion": "1.4.2",
     "appName": "umbrella-bot",
     "pid": 4218,
-    "capabilities": ["manual-updates", "shutdown-progress"],
+    "capabilities": ["manual-updates"],
     "preferences": {
       "updateMode": "manual"
     }
@@ -179,7 +179,6 @@ First message after pipe connect. App sends its identity, declares its capabilit
 
 - `capabilities`: array of feature tokens (kebab-case strings) declaring which optional wire features the app speaks. The launcher uses this to decide which messages are safe to send to this app. **The baseline** (`hello`/`welcome`/`heartbeat`/`ping`/`pong`/`shutdown`/`shutdown-ack`) is always supported and need not be listed. Tokens defined for v1.0:
   - `manual-updates` — app speaks the `update-check` / `update-status` / `update-available` / `update-now` / `set-update-mode` family (§3.5.9–14). Required for the launcher to honour any non-default `updateMode` preference and to push `update-available`. Apps without this capability get auto-mode regardless.
-  - `shutdown-progress` — app may emit `shutdown-progress` messages during cleanup. Purely informational on the launcher side.
   Future protocol additions add new tokens; unknown tokens are ignored by older launchers.
 - `preferences`: optional block of runtime settings the app would like to start with. Ignored fields fall back to defaults. Currently:
   - `updateMode`: `"auto"` (default — launcher applies updates as soon as polling discovers them) or `"manual"` (launcher only notifies the app and waits for `update-now`). Honoured only if the app declared `manual-updates` in `capabilities`. Can be changed at runtime via `set-update-mode` (§3.5.13) — useful for apps like Fishbowl that expose an "automatic updates" toggle in their own settings UI.
@@ -198,7 +197,7 @@ Reply to `hello`. Confirms acceptance and echoes the launcher's own capabilities
     "launcherVersion": "1.0.0",
     "accepted": true,
     "reason": null,
-    "capabilities": ["manual-updates", "shutdown-progress"]
+    "capabilities": ["manual-updates"]
   }
 }
 ```
@@ -267,17 +266,6 @@ Acknowledgement of the shutdown message. Send immediately, then start cleanup.
 
 ```json
 { "id": "...", "replyTo": "...", "type": "shutdown-ack" }
-```
-
-#### 3.5.8 `shutdown-progress` — App → Launcher (optional)
-
-During cleanup, the app may optionally report progress.
-
-```json
-{
-  "type": "shutdown-progress",
-  "data": { "message": "flushing queue (3 items left)" }
-}
 ```
 
 #### 3.5.9 `update-check` — App → Launcher

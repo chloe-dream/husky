@@ -141,18 +141,6 @@ public sealed class MessageEnvelopeJsonTests
     }
 
     [Fact]
-    public void ShutdownProgress_payload_round_trips_through_json()
-    {
-        ShutdownProgressPayload original = new("flushing queue (3 items left)");
-
-        string json = JsonSerializer.Serialize(original, HuskyJsonContext.Default.ShutdownProgressPayload);
-        ShutdownProgressPayload? parsed = JsonSerializer.Deserialize(json, HuskyJsonContext.Default.ShutdownProgressPayload);
-
-        Assert.Equal("""{"message":"flushing queue (3 items left)"}""", json);
-        Assert.Equal(original, parsed);
-    }
-
-    [Fact]
     public void Hello_payload_round_trips_through_envelope()
     {
         HelloPayload original = new(1, "2.0.0-rc.1", "fishbowl", 12345);
@@ -219,13 +207,13 @@ public sealed class MessageEnvelopeJsonTests
             AppVersion: "1.4.2",
             AppName: "umbrella-bot",
             Pid: 4218,
-            Capabilities: [Capabilities.ManualUpdates, Capabilities.ShutdownProgress],
+            Capabilities: [Capabilities.ManualUpdates],
             Preferences: new HelloPreferences(UpdateMode: UpdateModes.Manual));
 
         string json = JsonSerializer.Serialize(payload, HuskyJsonContext.Default.HelloPayload);
 
         Assert.Equal(
-            """{"protocolVersion":1,"appVersion":"1.4.2","appName":"umbrella-bot","pid":4218,"capabilities":["manual-updates","shutdown-progress"],"preferences":{"updateMode":"manual"}}""",
+            """{"protocolVersion":1,"appVersion":"1.4.2","appName":"umbrella-bot","pid":4218,"capabilities":["manual-updates"],"preferences":{"updateMode":"manual"}}""",
             json);
     }
 
@@ -274,12 +262,12 @@ public sealed class MessageEnvelopeJsonTests
             LauncherVersion: "1.0.0",
             Accepted: true,
             Reason: null,
-            Capabilities: [Capabilities.ManualUpdates, Capabilities.ShutdownProgress]);
+            Capabilities: [Capabilities.ManualUpdates]);
 
         string json = JsonSerializer.Serialize(payload, HuskyJsonContext.Default.WelcomePayload);
 
         Assert.Equal(
-            """{"protocolVersion":1,"launcherVersion":"1.0.0","accepted":true,"capabilities":["manual-updates","shutdown-progress"]}""",
+            """{"protocolVersion":1,"launcherVersion":"1.0.0","accepted":true,"capabilities":["manual-updates"]}""",
             json);
     }
 

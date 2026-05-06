@@ -9,7 +9,6 @@ public static class MessageTypes
     public const string Pong = "pong";
     public const string Shutdown = "shutdown";
     public const string ShutdownAck = "shutdown-ack";
-    public const string ShutdownProgress = "shutdown-progress";
     public const string UpdateCheck = "update-check";
     public const string UpdateStatus = "update-status";
     public const string UpdateAvailable = "update-available";

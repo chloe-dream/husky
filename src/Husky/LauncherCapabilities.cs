@@ -13,6 +13,5 @@ internal static class LauncherCapabilities
     public static readonly IReadOnlyList<string> All = new[]
     {
         Capabilities.ManualUpdates,
-        Capabilities.ShutdownProgress,
     };
 }

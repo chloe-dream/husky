@@ -102,7 +102,6 @@ public sealed class HuskyClientHandshakeTests
 
         Assert.NotNull(hello!.Capabilities);
         Assert.Contains(Capabilities.ManualUpdates, hello.Capabilities!);
-        Assert.Contains(Capabilities.ShutdownProgress, hello.Capabilities!);
 
         await SendWelcomeAsync(harness.ServerWriter, envelope.Id, accepted: true);
         await using HuskyClient _ = await attachTask;
@@ -133,7 +132,7 @@ public sealed class HuskyClientHandshakeTests
     public async Task Welcome_capabilities_are_stored_on_the_client()
     {
         await using ConnectedHandshake handshake = await ConnectedHandshake.PerformAsync(
-            launcherCapabilities: [Capabilities.ManualUpdates, Capabilities.ShutdownProgress]);
+            launcherCapabilities: [Capabilities.ManualUpdates]);
 
         Assert.Contains(Capabilities.ManualUpdates, handshake.Client.LauncherCapabilities);
         Assert.True(handshake.Client.SupportsManualUpdates);

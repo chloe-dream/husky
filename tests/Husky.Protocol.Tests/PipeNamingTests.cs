@@ -63,6 +63,5 @@ public sealed class PipeNamingTests
         Assert.Equal("pong", MessageTypes.Pong);
         Assert.Equal("shutdown", MessageTypes.Shutdown);
         Assert.Equal("shutdown-ack", MessageTypes.ShutdownAck);
-        Assert.Equal("shutdown-progress", MessageTypes.ShutdownProgress);
     }
 }

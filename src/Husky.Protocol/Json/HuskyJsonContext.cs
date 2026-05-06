@@ -12,7 +12,6 @@ namespace Husky.Protocol;
 [JsonSerializable(typeof(WelcomePayload))]
 [JsonSerializable(typeof(PongPayload))]
 [JsonSerializable(typeof(ShutdownPayload))]
-[JsonSerializable(typeof(ShutdownProgressPayload))]
 [JsonSerializable(typeof(UpdateStatusPayload))]
 [JsonSerializable(typeof(UpdateAvailablePayload))]
 [JsonSerializable(typeof(SetUpdateModePayload))]

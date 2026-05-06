@@ -498,7 +498,7 @@ public sealed class HuskyClient : IAsyncDisposable
             AppVersion: GetAppVersion(),
             AppName: appName,
             Pid: Environment.ProcessId,
-            Capabilities: [Protocol.Capabilities.ManualUpdates, Protocol.Capabilities.ShutdownProgress],
+            Capabilities: [Protocol.Capabilities.ManualUpdates],
             Preferences: new HelloPreferences(UpdateMode: ToWireMode(options.UpdateMode)));
 
         JsonElement data = JsonSerializer.SerializeToElement(payload, HuskyJsonContext.Default.HelloPayload);

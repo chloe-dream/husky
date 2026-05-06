@@ -6,7 +6,7 @@ namespace Husky.Client.Tests;
 
 public sealed class HuskyClientUpdateProtocolTests
 {
-    private static readonly IReadOnlyList<string> ManualCaps = [Capabilities.ManualUpdates, Capabilities.ShutdownProgress];
+    private static readonly IReadOnlyList<string> ManualCaps = [Capabilities.ManualUpdates];
 
     [Fact]
     public async Task CheckForUpdateAsync_returns_info_when_status_says_available()
