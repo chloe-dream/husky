@@ -1,0 +1,184 @@
+using System.Globalization;
+using Husky;
+using Retro.Crt;
+
+// Husky TUI demo — exercises the LEASH §10.4 layout without a real
+// LauncherRuntime, so we can iterate visually without a config / source /
+// hosted app. Constructs HuskyApp directly via InternalsVisibleTo, swaps
+// ConsoleOutput's sink, and drives a scripted fixture loop on a background
+// task.
+//
+// The fixtures cover, in order:
+//   1. boot sequence (5 quick husky lines).
+//   2. heartbeat-style app stdout ticks.
+//   3. watchdog pong updates with status words.
+//   4. mixed status palette (up / down / healthy / degraded).
+//   5. force-true growl escalation (the dog barks audibly).
+//   6. mock sniffing cycle resolving to "new version found".
+//   7. extra-long line to verify LogViewer clipping (no wrapping).
+//   8. 200-line burst to verify the ConcurrentQueue drain keeps up.
+//
+// After the burst the demo idles. Press Esc to exit.
+//
+// Run with: dotnet run --project samples/Husky.TuiDemo
+
+using var demoCts = new CancellationTokenSource();
+
+HuskyApp app = new("0.3.2-demo", onExitRequested: () =>
+{
+    try { demoCts.Cancel(); }
+    catch (ObjectDisposedException) { /* shutting down */ }
+});
+ConsoleOutput.SetSink(app);
+
+Task fixtureTask = Task.Run(() => RunFixturesAsync(demoCts.Token));
+
+app.Run();
+
+// User pressed Esc → demoCts already cancelled by the callback. If we got
+// here some other way (Application.Exit from somewhere, future hotkey),
+// make sure the fixture loop unwinds.
+try { demoCts.Cancel(); } catch (ObjectDisposedException) { }
+try { await fixtureTask.ConfigureAwait(false); }
+catch (OperationCanceledException) { /* expected */ }
+
+ConsoleOutput.ResetSink();
+return 0;
+
+static async Task RunFixturesAsync(CancellationToken ct)
+{
+    try
+    {
+        await BootSequenceAsync(ct).ConfigureAwait(false);
+        await ActivityLoopAsync(ct).ConfigureAwait(false);
+        await BurstAsync(ct).ConfigureAwait(false);
+        await IdleAsync(ct).ConfigureAwait(false);
+    }
+    catch (OperationCanceledException) { /* normal */ }
+}
+
+static async Task BootSequenceAsync(CancellationToken ct)
+{
+    ConsoleOutput.Husky("woof. starting demo-app");
+    await Task.Delay(150, ct).ConfigureAwait(false);
+    ConsoleOutput.Husky("config loaded from husky.config.json");
+    await Task.Delay(150, ct).ConfigureAwait(false);
+    ConsoleOutput.Husky("source: github://demo/demo (latest: v1.4.2)");
+    await Task.Delay(200, ct).ConfigureAwait(false);
+    ConsoleOutput.Husky("starting demo-app v1.4.2");
+    await Task.Delay(400, ct).ConfigureAwait(false);
+    ConsoleOutput.AppOut("demo-app: bootstrap complete");
+    await Task.Delay(200, ct).ConfigureAwait(false);
+    ConsoleOutput.AppOut("demo-app: connected to 12 guilds");
+    await Task.Delay(200, ct).ConfigureAwait(false);
+    ConsoleOutput.Husky("demo-app v1.4.2 is up.");
+}
+
+static async Task ActivityLoopAsync(CancellationToken ct)
+{
+    int tick = 0;
+    DateTime startedAt = DateTime.UtcNow;
+
+    while (!ct.IsCancellationRequested && (DateTime.UtcNow - startedAt).TotalSeconds < 12)
+    {
+        await Task.Delay(1100, ct).ConfigureAwait(false);
+        tick++;
+
+        // Most ticks are routine app stdout; sprinkle in pongs, a stderr
+        // line, a growl, and an update-found scenario.
+        switch (tick)
+        {
+            case 1:
+                ConsoleOutput.AppOut("demo-app: tick — queue=12 guilds=42");
+                break;
+            case 2:
+                ConsoleOutput.Husky("pong: status=healthy queue=12 guilds=42");
+                break;
+            case 3:
+                ConsoleOutput.AppOut("demo-app: tick — queue=8 guilds=42");
+                break;
+            case 4:
+                ConsoleOutput.AppErr("demo-app: WARN connection reset, retrying");
+                break;
+            case 5:
+                ConsoleOutput.Husky("pong: status=degraded queue=205 guilds=42");
+                break;
+            case 6:
+                // §3.5.13 capability-warning style yellow line.
+                ConsoleOutput.Husky(
+                    "demo-app sent set-update-mode=manual without 'manual-updates' — ignored.",
+                    messageColor: Color.Yellow);
+                break;
+            case 7:
+                // Growl escalation — force:true triggers the bell in line
+                // mode; in TUI it just appears at the tail like everything
+                // else but Crt.Bell still fires (audible).
+                ConsoleOutput.Husky(
+                    "growling — no pong in 30s. probing.",
+                    force: true);
+                break;
+            case 8:
+                ConsoleOutput.AppOut("demo-app: tick — queue=4 guilds=42");
+                break;
+            case 9:
+                ConsoleOutput.Husky("pong: status=healthy queue=4 guilds=42");
+                break;
+            case 10:
+                // Sniffing cycle — Spinner is suppressed in TUI; only the
+                // resolution line surfaces.
+                ConsoleOutput.Husky("new version found: v1.4.3", messageColor: Color.LightGreen);
+                break;
+            case 11:
+                ConsoleOutput.Husky("manual mode — notifying app, waiting for trigger.");
+                break;
+            default:
+                ConsoleOutput.AppOut(
+                    $"demo-app: tick — queue={Math.Max(0, 12 - tick)} guilds=42");
+                break;
+        }
+    }
+
+    // Long-line clipping fixture (LEASH §10.4: no wrapping; LogViewer clips
+    // with a "…" marker at the right edge).
+    ConsoleOutput.AppOut(
+        "demo-app: VERY-LONG-LINE — " +
+        new string('-', 220) +
+        " end.");
+}
+
+static async Task BurstAsync(CancellationToken ct)
+{
+    ConsoleOutput.Husky("burst: 200 lines incoming.");
+    await Task.Delay(200, ct).ConfigureAwait(false);
+
+    for (var i = 0; i < 200; i++)
+    {
+        if (ct.IsCancellationRequested) break;
+        switch (i % 4)
+        {
+            case 0: ConsoleOutput.AppOut($"burst {i:000}: stdout payload"); break;
+            case 1: ConsoleOutput.AppOut($"burst {i:000}: another stdout line"); break;
+            case 2: ConsoleOutput.AppErr($"burst {i:000}: stderr noise"); break;
+            default: ConsoleOutput.Pipe($"burst {i:000}: pipe trace 0x{i:X4}"); break;
+        }
+        if (i % 20 == 0)
+            await Task.Delay(50, ct).ConfigureAwait(false);
+    }
+
+    ConsoleOutput.Husky(
+        $"burst complete — drained 200 lines.",
+        messageColor: Color.LightGreen);
+}
+
+static async Task IdleAsync(CancellationToken ct)
+{
+    ConsoleOutput.Husky("idle. press Esc to exit.");
+    int n = 0;
+    while (!ct.IsCancellationRequested)
+    {
+        await Task.Delay(7000, ct).ConfigureAwait(false);
+        n++;
+        ConsoleOutput.AppOut(
+            $"demo-app: idle heartbeat #{n.ToString(CultureInfo.InvariantCulture)} at {DateTime.Now:HH:mm:ss}");
+    }
+}

@@ -31,6 +31,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Husky.Tests" />
+    <InternalsVisibleTo Include="Husky.TuiDemo" />
   </ItemGroup>
 
   <ItemGroup>
