@@ -9,7 +9,11 @@ using Retro.Crt;
 Console.OutputEncoding = Encoding.UTF8;
 
 string launcherVersion = GetLauncherVersion();
-Husky.Banner.Render(launcherVersion);
+// LEASH §10.3: banner is line-mode-only — in TUI mode the header band
+// carries the branding. Use the same TTY predictor as the mode selector
+// below so the two stay in sync.
+if (Console.IsOutputRedirected)
+    Husky.Banner.Render(launcherVersion);
 
 // Step 1 — parse CLI flags (LEASH §5.2.1). Resolves --dir and the
 // synthetic source block before we touch any file.
@@ -190,13 +194,57 @@ LauncherRuntime runtime = new(
     executablePath: executablePath,
     seedUpdateInfo: bootPoll);
 
+// Step 7 — pick the rendering mode. TUI mode (LEASH §10.4) requires a
+// real interactive terminal; piping or redirection forces line mode
+// (LEASH §10.3) so `husky | grep` and `husky > log.txt` keep working.
+// Construction failures (very old console host, no ANSI, raw-mode
+// blocked) fall back to line mode without complaining.
+HuskyApp? tuiApp = null;
+if (!Console.IsOutputRedirected)
+{
+    try
+    {
+        tuiApp = new HuskyApp(launcherVersion, onExitRequested: () =>
+        {
+            try { gracefulTrigger.Cancel(); }
+            catch (ObjectDisposedException) { /* shutting down */ }
+        });
+        ConsoleOutput.SetSink(tuiApp);
+    }
+    catch
+    {
+        tuiApp = null;
+    }
+}
+
 try
 {
+    if (tuiApp is not null)
+    {
+        Task<int> runtimeTask = Task.Run(async () =>
+        {
+            try
+            {
+                return await runtime.RunAsync(gracefulTrigger.Token, hardKillTrigger.Token).ConfigureAwait(false);
+            }
+            finally
+            {
+                // Always dismiss the TUI when the runtime exits, no matter
+                // how — natural shutdown, exception, or user-triggered Esc.
+                tuiApp.Dismiss();
+            }
+        });
+
+        tuiApp.Run();
+        return await runtimeTask.ConfigureAwait(false);
+    }
+
     return await runtime.RunAsync(gracefulTrigger.Token, hardKillTrigger.Token).ConfigureAwait(false);
 }
 finally
 {
     Console.CancelKeyPress -= ctrlCHandler;
+    ConsoleOutput.ResetSink();
 }
 
 static HttpClient BuildHttpClient(string launcherVersion)
