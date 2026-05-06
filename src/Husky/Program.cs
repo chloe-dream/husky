@@ -199,11 +199,22 @@ if (!Console.IsOutputRedirected)
 {
     try
     {
-        tuiApp = new HuskyApp(launcherVersion, onExitRequested: () =>
-        {
-            try { gracefulTrigger.Cancel(); }
-            catch (ObjectDisposedException) { /* shutting down */ }
-        });
+        tuiApp = new HuskyApp(
+            launcherVersion,
+            onUpdateRequested: () =>
+            {
+                // C-6 wires this to LauncherRuntime.RequestUpdateNow();
+                // until then, the [u] button just announces itself so users
+                // know it registered the click without any side-effect.
+                ConsoleOutput.Husky(
+                    "[u] update now — not yet wired (C-6 follow-up).",
+                    messageColor: Color.Yellow);
+            },
+            onExitRequested: () =>
+            {
+                try { gracefulTrigger.Cancel(); }
+                catch (ObjectDisposedException) { /* shutting down */ }
+            });
         ConsoleOutput.SetSink(tuiApp);
     }
     catch

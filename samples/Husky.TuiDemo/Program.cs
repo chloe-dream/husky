@@ -28,11 +28,21 @@ using Retro.Crt;
 
 using var demoCts = new CancellationTokenSource();
 
-HuskyApp app = new("0.3.2-demo", onExitRequested: () =>
-{
-    try { demoCts.Cancel(); }
-    catch (ObjectDisposedException) { /* shutting down */ }
-});
+HuskyApp app = new(
+    "0.3.2-demo",
+    onUpdateRequested: () =>
+    {
+        // The demo has no real update flow; just surface the click so the
+        // hotkey/button is visibly responsive.
+        ConsoleOutput.Husky(
+            "[u] update now — demo has no real update path.",
+            messageColor: Color.Yellow);
+    },
+    onExitRequested: () =>
+    {
+        try { demoCts.Cancel(); }
+        catch (ObjectDisposedException) { /* shutting down */ }
+    });
 ConsoleOutput.SetSink(app);
 
 Task fixtureTask = Task.Run(() => RunFixturesAsync(demoCts.Token));

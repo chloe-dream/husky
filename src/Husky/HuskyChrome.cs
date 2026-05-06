@@ -9,13 +9,15 @@ namespace Husky;
 /// <summary>
 /// Root container for <see cref="HuskyApp"/>. Lays out the three rows
 /// described in LEASH §10.4: a 1-row header, a fill-the-rest log
-/// viewport, and a 1-row action bar. Holds the chrome-level Esc hotkey
-/// that triggers graceful shutdown — buttons and other hotkeys come in
-/// later phases.
+/// viewport, and a 1-row action bar with three real focusable buttons.
+/// Owns the chrome-level hotkeys (c/u/x/Esc/Ctrl+C) that shadow the
+/// buttons so users can drive the TUI from the keyboard alone.
 /// </summary>
 internal sealed class HuskyChrome : Container
 {
     private readonly Action drainPending;
+    private readonly Action onCopyRequested;
+    private readonly Action onUpdateRequested;
     private readonly Action onExitRequested;
     private readonly StackPanel body;
     private readonly HeaderView header;
@@ -24,18 +26,24 @@ internal sealed class HuskyChrome : Container
         string launcherVersion,
         LogViewer log,
         Action drainPending,
+        Action onCopyRequested,
+        Action onUpdateRequested,
         Action onExitRequested)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(launcherVersion);
         ArgumentNullException.ThrowIfNull(log);
         ArgumentNullException.ThrowIfNull(drainPending);
+        ArgumentNullException.ThrowIfNull(onCopyRequested);
+        ArgumentNullException.ThrowIfNull(onUpdateRequested);
         ArgumentNullException.ThrowIfNull(onExitRequested);
 
         this.drainPending = drainPending;
+        this.onCopyRequested = onCopyRequested;
+        this.onUpdateRequested = onUpdateRequested;
         this.onExitRequested = onExitRequested;
 
         header = new HeaderView(launcherVersion);
-        var actionBar = new ActionBarView();
+        var actionBar = new ActionBar(onCopyRequested, onUpdateRequested, onExitRequested);
 
         body = new StackPanel
         {
@@ -79,11 +87,34 @@ internal sealed class HuskyChrome : Container
 
     public override bool OnKey(KeyEvent key, Application app)
     {
-        if (app.Modal is null && key.Key == Key.Escape)
+        if (app.Modal is not null) return base.OnKey(key, app);
+
+        // Esc / x / Ctrl+C → graceful exit. Two press of the latter could
+        // escalate to hard kill in the future; for now any of them just
+        // requests a graceful shutdown.
+        if (key.Key == Key.Escape) { onExitRequested(); return true; }
+        if (key.Key == Key.Glyph)
         {
-            onExitRequested();
-            return true;
+            char g = key.Glyph;
+            // Ctrl+C maps to a glyph 'c' with the Ctrl modifier on most
+            // terminals; treat it as the exit hotkey to match shell habits.
+            if (g is 'c' or 'C' && (key.Modifiers & KeyModifiers.Ctrl) != 0)
+            {
+                onExitRequested();
+                return true;
+            }
+            // Plain letters trigger the corresponding action — no Ctrl/Alt.
+            if ((key.Modifiers & ~KeyModifiers.Shift) == KeyModifiers.None)
+            {
+                switch (g)
+                {
+                    case 'c' or 'C': onCopyRequested();   return true;
+                    case 'u' or 'U': onUpdateRequested(); return true;
+                    case 'x' or 'X': onExitRequested();   return true;
+                }
+            }
         }
+
         return base.OnKey(key, app);
     }
 
@@ -184,25 +215,78 @@ internal sealed class HuskyChrome : Container
     }
 
     /// <summary>
-    /// 1-row strip at the bottom showing the available actions as plain
-    /// hint text. Real <see cref="Button"/> widgets and the [c]/[u]/[x]
-    /// hotkey wiring land in the next phase; this placeholder keeps the
-    /// layout footprint correct and gives users a visible affordance.
+    /// 1-row strip at the bottom holding three focusable buttons:
+    /// <c>[c] copy logs</c>, <c>[u] update now</c>, <c>[x] exit</c>.
+    /// The bracketed letters double as global hotkeys handled by the
+    /// chrome's <see cref="HuskyChrome.OnKey"/>; Tab/Shift+Tab cycles
+    /// focus through them; Enter activates the focused button.
     /// </summary>
-    private sealed class ActionBarView : View
+    private sealed class ActionBar : Container
     {
-        public override void OnDraw(ScreenBuffer screen)
+        // Cell widths chosen to fit each label plus one cell of padding on
+        // either side; the focus highlight inverts the whole rectangle so
+        // the gap matters visually.
+        private const int CopyWidth   = 16; // " [c] copy logs  "
+        private const int UpdateWidth = 18; // " [u] update now  "
+        private const int ExitWidth   = 11; // " [x] exit  "
+        private const int Gap         = 2;
+
+        private readonly Button copyButton;
+        private readonly Button updateButton;
+        private readonly Button exitButton;
+
+        public ActionBar(Action onCopy, Action onUpdate, Action onExit)
+        {
+            copyButton = new Button(" [c] copy logs ")
+            {
+                Foreground = Color.LightGray,
+                Background = Color.DarkGray,
+            };
+            copyButton.Click += () => onCopy();
+
+            updateButton = new Button(" [u] update now ")
+            {
+                Foreground = Color.LightGray,
+                Background = Color.DarkGray,
+            };
+            updateButton.Click += () => onUpdate();
+
+            exitButton = new Button(" [x] exit ")
+            {
+                Foreground = Color.LightGray,
+                Background = Color.DarkGray,
+            };
+            exitButton.Click += () => onExit();
+
+            Children.Add(copyButton);
+            Children.Add(updateButton);
+            Children.Add(exitButton);
+        }
+
+        protected override void ArrangeChildren()
         {
             var b = Bounds;
-            if (b.Width <= 0 || b.Height <= 0) return;
+            // Left-aligned with one-cell margin and gaps; if the row is too
+            // narrow, the buttons clip off the right edge — preferable to
+            // truncating the labels themselves.
+            int x = b.X + 1;
+            copyButton.Bounds = new Rect(x, b.Y, CopyWidth, 1);
+            x += CopyWidth + Gap;
+            updateButton.Bounds = new Rect(x, b.Y, UpdateWidth, 1);
+            x += UpdateWidth + Gap;
+            exitButton.Bounds = new Rect(x, b.Y, ExitWidth, 1);
+        }
 
-            screen.FillRect(b.X, b.Y, b.Width, b.Height,
+        public override void OnDraw(ScreenBuffer screen)
+        {
+            // Fill the strip first so the gaps between buttons read as part
+            // of the bar rather than as terminal-default empty cells.
+            screen.FillRect(Bounds.X, Bounds.Y, Bounds.Width, Bounds.Height,
                 new Cell(' ', Color.LightGray, Color.DarkGray));
 
-            const string hint = " [c] copy logs   [u] update now   [x] exit ";
-            if (b.Width >= hint.Length)
-                screen.PutString(b.X, b.Y, hint.AsSpan(),
-                    Color.LightGray, Color.DarkGray);
+            ArrangeChildren();
+            for (var i = 0; i < Children.Count; i++)
+                Children[i].OnDraw(screen);
         }
     }
 }

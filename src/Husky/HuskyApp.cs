@@ -44,9 +44,13 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
     private readonly HuskyChrome chrome;
     private readonly Application application;
 
-    public HuskyApp(string launcherVersion, Action onExitRequested)
+    public HuskyApp(
+        string launcherVersion,
+        Action onUpdateRequested,
+        Action onExitRequested)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(launcherVersion);
+        ArgumentNullException.ThrowIfNull(onUpdateRequested);
         ArgumentNullException.ThrowIfNull(onExitRequested);
 
         logViewer = new LogViewer
@@ -61,6 +65,10 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
             launcherVersion: launcherVersion,
             log: logViewer,
             drainPending: DrainPending,
+            // [c] copy logs: this side owns the LogViewer snapshot, so the
+            // copy handler is local to HuskyApp.
+            onCopyRequested: CopyLogsToFile,
+            onUpdateRequested: onUpdateRequested,
             onExitRequested: onExitRequested);
 
         application = new Application(chrome);
@@ -97,6 +105,44 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
         chrome.SetAppInfo(appName, appVersion);
 
     public void SetHealth(string? status) => chrome.SetHealth(status);
+
+    /// <summary>
+    /// Snapshot the current <see cref="LogViewer"/> contents and write them
+    /// to <c>husky-logs-&lt;UTC-timestamp&gt;.txt</c> in the working
+    /// directory. Called from the [c] button / hotkey on the UI thread, so
+    /// the snapshot is consistent; the actual file IO runs on a background
+    /// task to keep the render loop responsive. The result lands as a
+    /// husky log line — green on success, yellow on failure — so the user
+    /// sees confirmation in the same buffer they just exported.
+    /// </summary>
+    public void CopyLogsToFile()
+    {
+        // UI-thread snapshot: LogViewer.Items isn't thread-safe, so copy
+        // before we spin up the IO task.
+        var snapshot = new List<string>(logViewer.Items.Count);
+        foreach (LogEntry entry in logViewer.Items)
+            snapshot.Add(entry.Text ?? string.Empty);
+
+        string fileName = $"husky-logs-{DateTime.UtcNow:yyyy-MM-ddTHH-mm-ss}Z.txt";
+        string path = Path.Combine(Directory.GetCurrentDirectory(), fileName);
+
+        Task.Run(() =>
+        {
+            try
+            {
+                File.WriteAllLines(path, snapshot);
+                ConsoleOutput.Husky(
+                    $"wrote {snapshot.Count} lines → {fileName}",
+                    messageColor: Color.LightGreen);
+            }
+            catch (Exception ex)
+            {
+                ConsoleOutput.Husky(
+                    $"copy logs failed: {ex.Message}",
+                    messageColor: Color.Yellow);
+            }
+        });
+    }
 
     public IDisposable BeginLiveWidget()
     {
