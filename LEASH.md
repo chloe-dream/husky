@@ -908,17 +908,53 @@ The `source` block of any source-supplied config is dropped with a console warni
 
 ## 10. Console Rendering
 
-### 10.1 Library
+### 10.1 Two Modes
 
-- **[Retro.Crt](https://github.com/chloe-dream/retro-crt)** (NuGet, **0.3.0+**) for color, banner, progress bars, spinners, semantic logging.
-- Pascal CRT-Unit-style API. Tiny, dependency-free, trim- and AOT-clean.
-- Cross-platform, ANSI-capable on modern terminals; `NO_COLOR` and Windows
-  legacy console are handled by the library. Truecolor is quantized down to
-  256-color or Standard16 if the terminal cannot render the full 24 bits.
+Husky renders in one of two modes, picked at startup based on whether
+stdout is attached to an interactive terminal:
 
-### 10.2 Greeting Banner
+- **TUI mode** (default on a real terminal): a fullscreen, alt-screen
+  layout with a fixed header, a scrollable log viewport, and a fixed
+  action bar. Log lines never wrap — overflow is clipped at the
+  viewport's right edge.
+- **Line mode** (when stdout is redirected, piped, or
+  `NO_COLOR`/non-TTY environments): the legacy line-oriented stream
+  with banner + log lines. `husky | grep`, `husky > file.log`,
+  CI-style log scraping, and journald all stay first-class. Bars and
+  spinners auto-degrade to a single final-frame line per operation.
 
-On startup: Husky ASCII logo + tagline. The ASCII art is stored as a `string[]` in the launcher code and rendered with `Retro.Crt.Banner.Gradient` — colour interpolated per line from a cool ice-blue at the top to a brighter cyan at the bottom (the husky-fur metaphor). On terminals without truecolor, Crt falls back to the gradient's start colour.
+Detection is `Console.IsOutputRedirected == false` plus a probe for
+`Application` startup; if `Retro.Crt.Tui.Application` reports the
+terminal cannot host a fullscreen UI (very old console host, no ANSI
+support), Husky falls back to line mode without complaining.
+
+### 10.2 Libraries
+
+- **[Retro.Crt](https://github.com/chloe-dream/retro-crt)** (NuGet,
+  **0.6.0+**) for color, screen buffer, input parsing, banner.
+- **Retro.Crt.Tui** (NuGet, **0.1.0+**) for the TUI layer:
+  `Application`, `LogViewer`, `Button`, `StackPanel`, `Layout.Dock`.
+  Loaded only in TUI mode but referenced unconditionally — the
+  package is small and trim/AOT-clean.
+- Pascal CRT-Unit-style API. Tiny, no third-party dependencies,
+  trim- and AOT-clean.
+- Cross-platform, ANSI-capable on modern terminals; `NO_COLOR` and
+  Windows legacy console are handled by the library. Truecolor is
+  quantized down to 256-color or Standard16 if the terminal cannot
+  render the full 24 bits.
+
+### 10.3 Line Mode
+
+The fallback used when stdout is redirected.
+
+#### Greeting Banner
+
+On startup: Husky ASCII logo + tagline. Stored as a `string[]` in
+the launcher and rendered with `Retro.Crt.Banner.Gradient` — colour
+interpolated per line from a cool ice-blue at the top to a brighter
+cyan at the bottom. The banner is **only** drawn in line mode; in
+TUI mode the header band carries the branding and the banner is
+omitted.
 
 ```
   <husky-ascii-art (rendered with ice-blue→cyan vertical gradient)>
@@ -927,7 +963,7 @@ On startup: Husky ASCII logo + tagline. The ASCII art is stored as a `string[]` 
   your loyal app launcher
 ```
 
-### 10.3 Log Line Format
+#### Log Line Format
 
 ```
 HH:mm:ss  <source>  <message>
@@ -938,81 +974,146 @@ HH:mm:ss  <source>  <message>
   - `husky` → cyan
   - `app` → green (stdout) / red (stderr)
   - `pipe` → dim (only when verbose-debug is opted in)
-- `<message>`: default foreground, with status-word highlights (e.g. `up` green, `down` red, `degraded` yellow, `growling` yellow).
+- `<message>`: default foreground, with status-word highlights
+  (e.g. `up` green, `down` red, `degraded` yellow, `growling` yellow).
 
-### 10.4 Husky Voice
+#### Bars and Spinners
 
-Husky speaks tersely, like a dog — short, punchy, with the occasional `woof.`. But never in the way. Examples:
+Auto-degraded to a single start line + a single summary line. No
+in-place redraw, no cursor magic — `husky > file.log` produces clean,
+parseable output. The summary line carries the authoritative result
+(byte count, duration, outcome).
+
+```
+13:47:03  husky     fetching v0.0.20…
+13:47:08  husky     fetched 6.8 MB in 4.2 s.
+```
+
+### 10.4 TUI Mode
+
+The default rendering on an interactive terminal.
+
+#### Layout
+
+```
+┌──────────────────────────────────────────────────────────┐
+│ 🐺 husky v0.3.2          umbrella-bot v1.4.2     healthy │  header (1 row)
+├──────────────────────────────────────────────────────────┤
+│ 13:47:03  husky    sniffing for updates… up to date.     │
+│ 13:47:08  app      worker started, 12 guilds connected   │
+│ 13:47:15  husky    new version found: v1.4.3             │  log viewport
+│ 13:47:15  husky    manual mode — waiting for trigger.    │  (star-sized)
+│ …                                                     ▓  │
+├──────────────────────────────────────────────────────────┤
+│ [c] copy logs  [u] update now  [x] exit       ▲▼ scroll │  action bar (1 row)
+└──────────────────────────────────────────────────────────┘
+```
+
+- **Header** (1 row, top): `🐺 husky vX.Y.Z` left-aligned,
+  `<appName> v<appVersion>` centered, current health
+  (`healthy`/`degraded`/`unhealthy`) right-aligned. Pre-handshake
+  the center is `(starting…)`; while crash-restart-paused, the right
+  side reads `down — restarting in 3s`.
+- **Log viewport** (fills): `Retro.Crt.Tui.LogViewer` with its own
+  scrollbar, autoscroll while pinned to tail, drag/wheel/keyboard
+  scrolling. Each line gets a single foreground colour matching its
+  source; mid-line styling (status-word highlights) is **not**
+  applied here — only in line mode. Lines never wrap; overflow is
+  clipped with a `…` marker at the right edge.
+- **Action bar** (1 row, bottom): three buttons plus a scroll-pos
+  hint on the right.
+
+#### Hotkeys
+
+Global (handled by the root container on bubble-up, after focused
+widgets get first crack):
+
+- `c` — copy logs (see §10.4 actions).
+- `u` — update now.
+- `x`, `Esc` — exit.
+
+Focus and scrolling (built-in to `Application` / `LogViewer`):
+
+- `Tab` / `Shift+Tab` — cycle focus.
+- `Enter` — activate the focused button.
+- `↑`/`↓`, `PgUp`/`PgDn`, `Home`/`End` — scroll the log viewport.
+- Mouse wheel and scrollbar drag — scroll.
+- Default focus: log viewport, pinned to tail.
+
+#### Actions
+
+- **Copy logs** — writes the current in-memory log buffer to
+  `husky-logs-<UTC-timestamp>.txt` in the working directory and
+  shows a 3-second toast (or status-bar replacement) reading
+  `wrote N lines → husky-logs-…`. No clipboard integration — file
+  export is portable across Windows/Linux without OS-specific
+  plumbing.
+- **Update now** — fires the same code path as an inbound
+  `update-now` message (LEASH §3.5.12). Hidden when the connected
+  app does not advertise `manual-updates`; greyed when no update is
+  cached.
+- **Exit** — graceful shutdown via §5.5 (sends `shutdown` with
+  `reason: "manual"`, awaits ack and timeout, then exits `0`).
+
+### 10.5 Husky Voice
+
+Husky speaks tersely, like a dog — short, punchy, with the occasional
+`woof.`. But never in the way. Examples:
 
 - Start: `woof. starting umbrella-bot`
-- Update check (spinner): `sniffing for updates` → `up to date.` or `new version found: v1.4.3` or `poll failed.`
-- Download (progress bar): label `fetching`, summary line `fetched 6.6 MB in 4.2 s.`
-- Extract (spinner): `extracting` → `extracted.` or `extract failed.`
-- Shutdown (spinner): `asking app to sit` → `app sat down.` or `app didn't respond. growling.` or `double interrupt — taking it down.`. Intermediate states drive the same spinner via `Update`: `no shutdown-ack — waiting anyway`, `pipe is gone — waiting for exit`, `grace period (+10s)`.
+- Update check: `sniffing for updates` → `up to date.` or `new version found: v1.4.3` or `poll failed.`
+- Download: `fetching v0.0.20…` → in-place updates while running → `fetched 6.6 MB in 4.2 s.`
+- Extract: `extracting` → `extracted.` or `extract failed.`
+- Shutdown: `asking app to sit` → `app sat down.` or `app didn't respond. growling.` or `double interrupt — taking it down.`. Intermediate states: `no shutdown-ack — waiting anyway`, `pipe is gone — waiting for exit`, `grace period (+10s)`.
 - Restart: `back online.` or `woof. <appname> v<version> is up.`
 - Crash limit reached: `enough. lying down.`
 
-These are *suggestions* — the implementer is free to stay in the Husky voice as they see fit. No AI clichés (`delve`, `navigate`, `seamless`, …) anywhere in user-visible text.
+These are *suggestions* — the implementer is free to stay in the
+Husky voice as they see fit. No AI clichés (`delve`, `navigate`,
+`seamless`, …) anywhere in user-visible text.
 
-### 10.5 Progress Bars
+### 10.6 In-Place Log Lines
 
-During download: `Retro.Crt.ProgressBar` (single-line, in-place redraw,
-auto-degraded to one final frame when output is redirected, hides the
-terminal cursor for its lifetime).
-
-The bar owns its line — it does **not** carry the `HH:mm:ss  husky    `
-prefix that normal log lines do, because Crt's CR-driven redraw would
-clobber the prefix on each frame. After the bar closes, a normal-format
-summary log line carries the result:
+Long-running operations (downloads, sniffing, extracting, shutdown
+waits) re-render their own log line in place rather than spawning a
+separate widget:
 
 ```
- fetching ████████░░░░░░░░  62%  4 100 000 / 6 600 000
-
-15:03:04  husky     fetched 6.6 MB in 4.2 s.
+13:47:03  husky     fetching ███████░░░░░░░░░░░░░░░░░░░░░░░  18%
+                 ↓
+13:47:03  husky     fetching ████████████████████████████░░  92%
+                 ↓
+13:47:03  husky     fetched 6.8 MB in 4.2 s.   (timestamp updates on completion)
 ```
 
-When `Content-Length` is missing on the response, the bar uses a one-cell
-total and pings to "100%" once on completion; the summary log line is
-always authoritative for byte count and duration.
+Behaviour:
 
-### 10.6 Spinners
+- One operation = one log line, one frozen start-timestamp during
+  updates. The completion line gets a fresh timestamp.
+- Frame rate capped at 10 Hz; the 0% / 100% frames are guaranteed.
+- **TUI mode**: implemented by replacing the `LogViewer`'s tail
+  entry; new log lines (from app stdout, watchdog warnings) flow
+  in above the in-place line as normal.
+- **Line mode**: degraded to start line + summary line, no in-place
+  redraw — pipe-friendly (see §10.3).
+- Two in-place operations at once are a contract error and throw —
+  Husky never has more than one running by design (download or
+  shutdown-wait or extract or sniff — never overlapping).
 
-For indeterminate operations Husky uses `Retro.Crt.Spinner`:
+The `force: true` channel from the previous live-widget gate
+remains, but only for line-mode error escalations that need to bypass
+the in-place line; in TUI mode every log line goes into the viewport
+in arrival order, no escalation channel needed.
 
-- `sniffing for updates` (style `Dots`) — wraps every source-poll round.
-- `extracting` (style `Braille`) — wraps the synchronous `ZipFile.ExtractToDirectory`.
-- `asking app to sit` (style `Pipe`) — wraps the entire graceful-shutdown wait sequence.
+### 10.7 Logs Are Not Files
 
-Like the progress bar, a spinner owns its line. Intermediate state is
-pushed through `Spinner.Update(label)`; the final outcome through
-`Spinner.Stop(label, color)`. Without ANSI support the spinner does
-not animate — it writes the label once and a newline on `Stop`.
-
-### 10.7 Live-Widget Gate
-
-A `ProgressBar` or `Spinner` can be visually shredded by interleaved log
-lines from the hosted app's stdout/stderr (and from the launcher's own
-warnings). Husky guards every widget with a process-global gate
-(`ConsoleOutput.BeginLiveWidget()`):
-
-- While a widget is active, app/launcher log lines are queued in a
-  bounded ring (cap **256 lines**, oldest dropped with a synthetic
-  `… N app line(s) elided` marker on flush).
-- On widget dispose, queued lines are flushed in arrival order with
-  their original timestamps preserved.
-- Error escalations that must be visible immediately (e.g. watchdog
-  `growling`) bypass the gate via a `force: true` overload of the husky
-  log channel — at the cost of briefly clobbering the active widget's
-  frame; the next redraw recovers.
-- Two widgets at once are a contract error and throw — Husky never has
-  more than one foreground widget by design (download bar OR shutdown
-  spinner OR extract spinner OR sniffing spinner — never overlapping).
-
-### 10.8 No File Logging
-
-- Husky writes nothing to files. Everything goes to the console.
-- Persistence is the operator's job: redirect output with OS tools (`> husky.log` / `journalctl`).
-- Bars and spinners auto-degrade when stdout is redirected — log files do not accumulate intermediate progress frames.
+- Husky writes nothing to disk on its own. The log buffer is in-memory
+  only, capped at **5 000 lines** (oldest dropped).
+- Persistence is the operator's choice: in line mode, redirect output
+  (`> husky.log` / journald). In TUI mode, the user presses `c` to
+  export the current buffer.
+- This satisfies §1.2 ("no file-based logging") — the `c` action is
+  an opt-in snapshot, not a streaming log file.
 
 ---
 
