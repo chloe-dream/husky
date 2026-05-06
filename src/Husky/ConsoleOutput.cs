@@ -347,8 +347,9 @@ internal static partial class ConsoleOutput
         /// <summary>
         /// Line-mode in-place line: the start line is already on screen;
         /// updates drop silently (auto-degrade per §10.3); Complete writes
-        /// the final-state line and Dispose releases the in-place gate plus
-        /// any queued lines waiting behind it.
+        /// the final-state line and releases the in-place gate. Disposing
+        /// without Complete just releases the gate — the start line stays
+        /// as the only visible artefact.
         /// </summary>
         private sealed class LineModeInPlaceLine(
             CrtConsoleSink owner, string source, Color sourceColor) : IInPlaceLine
@@ -356,25 +357,28 @@ internal static partial class ConsoleOutput
             private bool completed;
             private bool disposed;
 
-            public void Update(string message) { /* §10.3 auto-degrade */ }
+            public void Update(string message) { _ = message; /* §10.3 auto-degrade */ }
 
             public void Complete(string finalMessage, Color? finalMessageColor = null)
             {
                 if (completed) return;
                 completed = true;
-
-                // The start line is already on screen; the completion line
-                // follows on its own row. Force-bypass the queue (we hold the
-                // in-place gate, but the line should land before queued logs
-                // flush) by writing directly.
+                // The start line is already on screen; emit the completion
+                // line on its own row, then release the gate so the queued
+                // lines flush.
                 WriteLineNow(DateTime.Now, source, sourceColor, finalMessage, finalMessageColor);
+                ReleaseAndFlush();
             }
 
             public void Dispose()
             {
                 if (disposed) return;
                 disposed = true;
+                if (!completed) ReleaseAndFlush();
+            }
 
+            private void ReleaseAndFlush()
+            {
                 QueuedLine[] toFlush;
                 int dropped;
                 lock (owner.lockObj)

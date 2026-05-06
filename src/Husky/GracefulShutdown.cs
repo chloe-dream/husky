@@ -30,11 +30,8 @@ internal static class GracefulShutdown
         }
 
         bool needsHardKill = false;
-        using (ConsoleOutput.BeginLiveWidget())
+        using (var spinner = new InPlaceSpinner("asking app to sit"))
         {
-            using var spinner = Spinner.Show(
-                "asking app to sit", SpinnerStyle.Pipe, Color.LightCyan);
-
             try
             {
                 await session.SendShutdownAsync(
@@ -42,53 +39,48 @@ internal static class GracefulShutdown
             }
             catch (TimeoutException)
             {
-                spinner.Update("no shutdown-ack — waiting anyway");
+                spinner.UpdateLabel("no shutdown-ack — waiting anyway");
             }
             catch (IOException)
             {
-                spinner.Update("pipe is gone — waiting for exit");
+                spinner.UpdateLabel("pipe is gone — waiting for exit");
             }
             catch (OperationCanceledException) when (hardKill.IsCancellationRequested)
             {
-                spinner.Stop();
-                ConsoleOutput.Husky("double interrupt — taking it down.", messageColor: Color.LightRed);
+                spinner.Complete("double interrupt — taking it down.", Color.LightRed);
                 await KillAndDrainAsync(session).ConfigureAwait(false);
                 return;
             }
 
             if (await TryWaitForExitAsync(session, shutdownTimeout, hardKill).ConfigureAwait(false))
             {
-                spinner.Stop();
-                ConsoleOutput.Husky("app sat down.", messageColor: Color.LightGreen);
+                spinner.Complete("app sat down.", Color.LightGreen);
                 return;
             }
             if (hardKill.IsCancellationRequested)
             {
-                spinner.Stop();
-                ConsoleOutput.Husky("double interrupt — taking it down.", messageColor: Color.LightRed);
+                spinner.Complete("double interrupt — taking it down.", Color.LightRed);
                 await KillAndDrainAsync(session).ConfigureAwait(false);
                 return;
             }
 
             if (killAfter > TimeSpan.Zero)
             {
-                spinner.Update(
-                    $"grace period (+{killAfter.TotalSeconds:0}s)");
+                spinner.UpdateLabel($"grace period (+{killAfter.TotalSeconds:0}s)");
                 if (await TryWaitForExitAsync(session, killAfter, hardKill).ConfigureAwait(false))
                 {
-                    spinner.Stop("app sat down.", Color.LightGreen);
+                    spinner.Complete("app sat down.", Color.LightGreen);
                     return;
                 }
                 if (hardKill.IsCancellationRequested)
                 {
-                    spinner.Stop("double interrupt — taking it down.", Color.LightRed);
+                    spinner.Complete("double interrupt — taking it down.", Color.LightRed);
                     await KillAndDrainAsync(session).ConfigureAwait(false);
                     return;
                 }
             }
 
-            spinner.Stop();
-            ConsoleOutput.Husky("app didn't respond. growling.", messageColor: Color.Yellow);
+            spinner.Complete("app didn't respond. growling.", Color.Yellow);
             needsHardKill = true;
         }
 

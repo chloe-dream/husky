@@ -26,22 +26,19 @@ internal static class UpdateExtractor
             Directory.Delete(targetDirectory, recursive: true);
         Directory.CreateDirectory(targetDirectory);
 
-        // ZipFile.ExtractToDirectory is synchronous with no progress hook. A
-        // spinner gives the user a "still working" cue and stays in the LEASH
-        // §10.4 voice on its way out.
-        using (ConsoleOutput.BeginLiveWidget())
+        // ZipFile.ExtractToDirectory is synchronous with no progress hook. The
+        // in-place spinner gives the user a "still working" cue and stays in
+        // the LEASH §10.5 voice on its way out.
+        using (var spinner = new InPlaceSpinner("extracting"))
         {
-            using var spinner = Spinner.Show("extracting", SpinnerStyle.Braille, Color.LightCyan);
             try
             {
                 ZipFile.ExtractToDirectory(zipPath, targetDirectory);
-                spinner.Stop();
-                ConsoleOutput.Husky("extracted.", messageColor: Color.LightGreen);
+                spinner.Complete("extracted.", Color.LightGreen);
             }
             catch (InvalidDataException ex)
             {
-                spinner.Stop();
-                ConsoleOutput.Husky("extract failed.", messageColor: Color.LightRed);
+                spinner.Complete("extract failed.", Color.LightRed);
                 throw new UpdateException($"Update package is corrupt: {ex.Message}", ex);
             }
         }

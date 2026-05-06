@@ -14,11 +14,13 @@ using Retro.Crt;
 //   3. watchdog pong updates with status words.
 //   4. mixed status palette (up / down / healthy / degraded).
 //   5. force-true growl escalation (the dog barks audibly).
-//   6. mock sniffing cycle resolving to "new version found".
+//   6. animated InPlaceSpinner cycle ('sniffing for updates' → result).
 //   7. extra-long line to verify LogViewer clipping (no wrapping).
 //   8. fake download driving the real ProgressBarDownloadSink so the
 //      in-place line (LEASH §10.6) animates against the live LogViewer.
-//   9. 200-line burst to verify the ConcurrentQueue drain keeps up.
+//   9. animated InPlaceSpinner with intermediate UpdateLabel
+//      (graceful-shutdown style: 'asking app to sit' → 'no ack' → 'sat down').
+//  10. 200-line burst to verify the ConcurrentQueue drain keeps up.
 //
 // After the burst the demo idles. Press Esc to exit.
 //
@@ -53,7 +55,9 @@ static async Task RunFixturesAsync(CancellationToken ct)
     {
         await BootSequenceAsync(ct).ConfigureAwait(false);
         await ActivityLoopAsync(ct).ConfigureAwait(false);
+        await FakeSniffingAsync(ct).ConfigureAwait(false);
         await FakeDownloadAsync(ct).ConfigureAwait(false);
+        await FakeShutdownAsync(ct).ConfigureAwait(false);
         await BurstAsync(ct).ConfigureAwait(false);
         await IdleAsync(ct).ConfigureAwait(false);
     }
@@ -127,11 +131,8 @@ static async Task ActivityLoopAsync(CancellationToken ct)
                 ConsoleOutput.Husky("pong: status=healthy queue=4 guilds=42");
                 break;
             case 10:
-                // Sniffing cycle — Spinner is suppressed in TUI; only the
-                // resolution line surfaces.
-                ConsoleOutput.Husky("new version found: v1.4.3", messageColor: Color.LightGreen);
-                break;
-            case 11:
+                // Manual-mode update notification, before the FakeSniffing
+                // and FakeDownload fixtures take over the lower viewport.
                 ConsoleOutput.Husky("manual mode — notifying app, waiting for trigger.");
                 break;
             default:
@@ -147,6 +148,30 @@ static async Task ActivityLoopAsync(CancellationToken ct)
         "demo-app: VERY-LONG-LINE — " +
         new string('-', 220) +
         " end.");
+}
+
+static async Task FakeSniffingAsync(CancellationToken ct)
+{
+    using var spinner = new InPlaceSpinner("sniffing for updates");
+    await Task.Delay(2200, ct).ConfigureAwait(false);
+    spinner.Complete("new version found: v0.4.0", Color.LightGreen);
+    await Task.Delay(600, ct).ConfigureAwait(false);
+}
+
+static async Task FakeShutdownAsync(CancellationToken ct)
+{
+    ConsoleOutput.Husky("update complete — bouncing demo-app.");
+    await Task.Delay(300, ct).ConfigureAwait(false);
+
+    using var spinner = new InPlaceSpinner("asking app to sit");
+    await Task.Delay(1500, ct).ConfigureAwait(false);
+    // Intermediate label change keeps the animation ticking.
+    spinner.UpdateLabel("no shutdown-ack — waiting anyway");
+    await Task.Delay(1500, ct).ConfigureAwait(false);
+    spinner.UpdateLabel("grace period (+10s)");
+    await Task.Delay(1500, ct).ConfigureAwait(false);
+    spinner.Complete("app sat down.", Color.LightGreen);
+    await Task.Delay(400, ct).ConfigureAwait(false);
 }
 
 static async Task FakeDownloadAsync(CancellationToken ct)

@@ -120,25 +120,21 @@ using PosixSignalRegistration sigtermReg = PosixSignalRegistration.Create(
 UpdateInfo? bootPoll = null;
 Exception? bootPollError = null;
 bool bootPollCancelled = false;
-using (ConsoleOutput.BeginLiveWidget())
 {
-    using var spinner = Spinner.Show("sniffing for updates", SpinnerStyle.Dots, Color.LightCyan);
+    // Silent dispose: LauncherRuntime owns the boot announcement (it knows
+    // the installed version and decides whether to apply, log "up to date.",
+    // or "source unreachable.") so we don't pre-empt it with our own line.
+    using var spinner = new InPlaceSpinner("sniffing for updates");
     try
     {
         bootPoll = await source.CheckForUpdateAsync("0.0.0", gracefulTrigger.Token).ConfigureAwait(false);
-        // Silent stop: LauncherRuntime owns the boot announcement (it knows
-        // the installed version and decides whether to apply, log "up to
-        // date.", or "source unreachable.") so we don't pre-empt it.
-        spinner.Stop();
     }
     catch (OperationCanceledException) when (gracefulTrigger.IsCancellationRequested)
     {
-        spinner.Stop();
         bootPollCancelled = true;
     }
     catch (Exception ex)
     {
-        spinner.Stop();
         bootPollError = ex;
     }
 }

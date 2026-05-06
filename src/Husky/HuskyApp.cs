@@ -160,6 +160,13 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
                         logViewer.Append(formatted, op.SourceColor);
                     tailIsInPlace = false;
                     break;
+
+                case OpKind.EndInPlace:
+                    // Release the gate without changing the tail entry. The
+                    // last update frame stays visible as a dangling spinner-
+                    // step or progress frame; subsequent Append ops add below.
+                    tailIsInPlace = false;
+                    break;
             }
         }
     }
@@ -187,7 +194,14 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
         chrome.MarkDirty();
     }
 
-    private enum OpKind { Append, OpenInPlace, UpdateInPlace, CompleteInPlace }
+    private void EnqueueEnd()
+    {
+        pending.Enqueue(PendingOp.EndInPlace());
+        Interlocked.Exchange(ref inPlaceClaimed, 0);
+        chrome.MarkDirty();
+    }
+
+    private enum OpKind { Append, OpenInPlace, UpdateInPlace, CompleteInPlace, EndInPlace }
 
     private readonly record struct PendingOp(
         OpKind Kind, DateTime When, string Source, Color SourceColor, string Message)
@@ -200,6 +214,8 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
             new(OpKind.UpdateInPlace, w, s, c, m);
         public static PendingOp CompleteInPlace(DateTime w, string s, Color c, string m) =>
             new(OpKind.CompleteInPlace, w, s, c, m);
+        public static PendingOp EndInPlace() =>
+            new(OpKind.EndInPlace, default, "", default, "");
     }
 
     /// <summary>
@@ -242,23 +258,15 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
             if (disposed) return;
             disposed = true;
             // If the caller never called Complete, release the gate without
-            // changing the tail entry — the last update frame stays visible.
+            // changing the tail entry — the last update frame stays visible
+            // as a dangling progress/spinner step. Subsequent Appends flow
+            // below it as normal lines.
             if (!completed)
             {
-                owner.EnqueueComplete(when, source, sourceColor,
-                    LastInPlaceMessageOrFallback(source));
+                owner.EnqueueEnd();
                 completed = true;
             }
         }
-    }
-
-    private static string LastInPlaceMessageOrFallback(string source)
-    {
-        // Used only when a TuiInPlaceLine is disposed without Complete: we
-        // have no record of the last text on the queue side. The simplest
-        // honest finalisation is to emit a generic '<source>: done.' line so
-        // the in-place gate releases and the tail flips back to regular Appends.
-        return $"{source} done.";
     }
 
     private sealed class SuppressedScope(IDisposable crtSink) : IDisposable
