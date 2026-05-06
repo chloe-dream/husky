@@ -96,6 +96,9 @@ public sealed class AppPipeServerTests
         // when the app did not declare manual-updates.
         await using LauncherPipeHarness h = await LauncherPipeHarness.CreateConnectedAsync();
 
+        List<string> warnings = [];
+        h.Server.OnCapabilityWarning = warnings.Add;
+
         Task accept = h.Server.AcceptAndHandshakeAsync(TimeSpan.FromSeconds(5));
 
         await SendHelloAsync(
@@ -108,6 +111,28 @@ public sealed class AppPipeServerTests
 
         Assert.False(h.Server.ConnectedApp!.SupportsManualUpdates);
         Assert.Equal(UpdateModes.Auto, h.Server.ConnectedApp.UpdateMode);
+        Assert.Single(warnings);
+        Assert.Contains("test-app", warnings[0]);
+        Assert.Contains(Capabilities.ManualUpdates, warnings[0]);
+    }
+
+    [Fact]
+    public async Task ConnectedApp_does_not_warn_when_capability_present_or_default_mode()
+    {
+        await using LauncherPipeHarness h = await LauncherPipeHarness.CreateConnectedAsync();
+
+        List<string> warnings = [];
+        h.Server.OnCapabilityWarning = warnings.Add;
+
+        Task accept = h.Server.AcceptAndHandshakeAsync(TimeSpan.FromSeconds(5));
+        await SendHelloAsync(
+            h.ClientWriter, "test-app", "1.0.0", 1,
+            capabilities: [Capabilities.ManualUpdates],
+            preferences: new HelloPreferences(UpdateMode: UpdateModes.Manual));
+        await ReadAsync(h.ClientReader); // welcome
+        await accept;
+
+        Assert.Empty(warnings);
     }
 
     [Fact]
@@ -320,6 +345,9 @@ public sealed class AppPipeServerTests
     {
         await using LauncherPipeHarness h = await LauncherPipeHarness.CreateConnectedAsync();
 
+        List<string> warnings = [];
+        h.Server.OnCapabilityWarning = warnings.Add;
+
         Task accept = h.Server.AcceptAndHandshakeAsync(TimeSpan.FromSeconds(5));
         await SendHelloAsync(h.ClientWriter, "test-app", "1.0.0", 1, capabilities: []);
         await ReadAsync(h.ClientReader); // welcome
@@ -339,6 +367,10 @@ public sealed class AppPipeServerTests
 
         Assert.Equal(UpdateModes.Auto, ackPayload!.Mode);
         Assert.Equal(UpdateModes.Auto, h.Server.ConnectedApp!.UpdateMode);
+        // The hello had no preference (defaults to auto), so the only warning
+        // should come from the runtime set-update-mode gate.
+        Assert.Single(warnings);
+        Assert.Contains("set-update-mode", warnings[0]);
     }
 
     [Fact]

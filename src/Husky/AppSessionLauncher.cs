@@ -1,4 +1,5 @@
 using Husky.Protocol;
+using Retro.Crt;
 
 namespace Husky;
 
@@ -26,6 +27,9 @@ internal sealed class AppSessionLauncher(
 
         string pipeName = PipeNaming.Generate();
         AppPipeServer pipeServer = AppPipeServer.Create(pipeName, launcherVersion);
+        // Wire the capability-warning hook before the handshake so initial
+        // hello-time downgrades (LEASH §3.5.13) reach the console.
+        pipeServer.OnCapabilityWarning = msg => ConsoleOutput.Husky(msg, messageColor: Color.Yellow);
 
         AppProcess? process = null;
         Watchdog? watchdog = null;

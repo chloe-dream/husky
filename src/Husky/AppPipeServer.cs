@@ -51,6 +51,16 @@ internal sealed class AppPipeServer : IAsyncDisposable
     public Action? OnUpdateNowRequested { get; set; }
 
     /// <summary>
+    /// Fires when an app-side request is downgraded because the app did not
+    /// declare a required capability — currently only the manual-updates gate
+    /// (LEASH §3.5.13). The argument is a ready-to-render warning sentence
+    /// (no timestamp, no source prefix). LauncherRuntime / AppSessionLauncher
+    /// route this through <c>ConsoleOutput</c> so the human running Husky
+    /// notices a misbehaving or mismatched-version app.
+    /// </summary>
+    public Action<string>? OnCapabilityWarning { get; set; }
+
+    /// <summary>
     /// Fires when the hosted app sends <c>update-check</c>. The launcher is
     /// expected to poll the source synchronously, update
     /// <see cref="CurrentUpdateStatus"/>, and return the fresh payload to
@@ -101,7 +111,7 @@ internal sealed class AppPipeServer : IAsyncDisposable
         await SendWelcomeAsync(helloEnvelope.Id, accepted: true, reason: null, ct).ConfigureAwait(false);
 
         IReadOnlyList<string> appCapabilities = hello.Capabilities ?? [];
-        string effectiveMode = ResolveInitialUpdateMode(appCapabilities, hello.Preferences);
+        string effectiveMode = ResolveInitialUpdateMode(appCapabilities, hello.Preferences, hello.AppName);
 
         ConnectedApp = new ConnectedApp(
             Name: hello.AppName,
@@ -112,8 +122,8 @@ internal sealed class AppPipeServer : IAsyncDisposable
         receiverLoop = Task.Run(() => ReceiverLoopAsync(lifetimeCts.Token), CancellationToken.None);
     }
 
-    private static string ResolveInitialUpdateMode(
-        IReadOnlyList<string> appCapabilities, HelloPreferences? preferences)
+    private string ResolveInitialUpdateMode(
+        IReadOnlyList<string> appCapabilities, HelloPreferences? preferences, string appName)
     {
         // LEASH §3.5.13 capability gating: a non-default updateMode is only
         // honoured when the app declared the manual-updates capability.
@@ -122,6 +132,9 @@ internal sealed class AppPipeServer : IAsyncDisposable
 
         if (requested == UpdateModes.Manual && !supportsManual)
         {
+            OnCapabilityWarning?.Invoke(
+                $"{appName} requested manual update mode but did not declare the " +
+                $"'{Protocol.Capabilities.ManualUpdates}' capability — falling back to auto.");
             return UpdateModes.Auto;
         }
 
@@ -375,6 +388,13 @@ internal sealed class AppPipeServer : IAsyncDisposable
         string accepted = (requested == UpdateModes.Manual && supportsManual)
             ? UpdateModes.Manual
             : UpdateModes.Auto;
+
+        if (requested == UpdateModes.Manual && !supportsManual)
+        {
+            OnCapabilityWarning?.Invoke(
+                $"{ConnectedApp?.Name ?? "app"} sent set-update-mode=manual without the " +
+                $"'{Protocol.Capabilities.ManualUpdates}' capability — ignored, mode stays auto.");
+        }
 
         if (ConnectedApp is not null)
         {
