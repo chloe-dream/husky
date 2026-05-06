@@ -28,7 +28,12 @@ using Retro.Crt;
 
 using var demoCts = new CancellationTokenSource();
 
-HuskyApp app = new(
+// Self-reference for the exit callback: the lambda must call Dismiss() on
+// the same HuskyApp instance to break out of Application.Run(). The real
+// launcher achieves the same handoff by dismissing from the runtime task's
+// `finally` block; the demo has no runtime, so the hotkey itself does both.
+HuskyApp app = null!;
+app = new HuskyApp(
     "0.3.2-demo",
     onUpdateRequested: () =>
     {
@@ -42,6 +47,9 @@ HuskyApp app = new(
     {
         try { demoCts.Cancel(); }
         catch (ObjectDisposedException) { /* shutting down */ }
+        // Without this the fixture loop unwinds but Application.Run keeps
+        // blocking the main thread, so [x]/Esc would silently 'do nothing'.
+        app.Dismiss();
     });
 ConsoleOutput.SetSink(app);
 

@@ -10,6 +10,7 @@ namespace Husky.Tests.EndToEnd;
 /// FakeHttpServer that hands back a ZIP of the TestApp build, and assert
 /// that the launcher bootstraps the app and brings it up.
 /// </summary>
+[Collection(EndToEndCollection.Name)]
 public sealed class BootstrapEndToEndTests
 {
     [Fact]

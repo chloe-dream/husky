@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 
 namespace Husky.Tests.EndToEnd;
 
+[Collection(EndToEndCollection.Name)]
 public sealed class CrashRestartEndToEndTests
 {
     [Fact]

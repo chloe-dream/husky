@@ -157,14 +157,19 @@ internal sealed class HuskyChrome : Container
                 localHealth = health;
             }
 
+            // Header shares the action-bar's DarkGray background so the bars
+            // bookend the LogViewer with consistent chrome. Cyan stays as an
+            // accent on the launcher branding rather than as a full bar
+            // colour — pastel status colours (LightGreen / Yellow / LightRed)
+            // read poorly on a LightCyan fill.
             screen.FillRect(b.X, b.Y, b.Width, b.Height,
-                new Cell(' ', Color.Black, Color.LightCyan));
+                new Cell(' ', Color.LightGray, Color.DarkGray));
 
-            // Left: launcher branding.
+            // Left: launcher branding in the husky accent colour.
             string left = $" husky v{launcherVersion}";
             int leftLen = Math.Min(left.Length, b.Width);
             screen.PutString(b.X, b.Y, left.AsSpan(0, leftLen),
-                Color.Black, Color.LightCyan, CellAttrs.Bold);
+                Color.LightCyan, Color.DarkGray, CellAttrs.Bold);
 
             // Right: health status, or a status hint while no app is attached.
             (string text, Color color) right = ResolveRightSlot(localName, localHealth);
@@ -173,7 +178,7 @@ internal sealed class HuskyChrome : Container
             if (rightLen > 0 && rightX >= b.X + leftLen)
             {
                 screen.PutString(rightX, b.Y, right.text.AsSpan(0, rightLen),
-                    right.color, Color.LightCyan, CellAttrs.Bold);
+                    right.color, Color.DarkGray, CellAttrs.Bold);
             }
 
             // Middle: app name + version, centered between the left and right
@@ -191,7 +196,7 @@ internal sealed class HuskyChrome : Container
                 {
                     int midX = slotStart + (slotWidth - mid.Length) / 2;
                     screen.PutString(midX, b.Y, mid.AsSpan(),
-                        Color.Black, Color.LightCyan, CellAttrs.Bold);
+                        Color.White, Color.DarkGray, CellAttrs.Bold);
                 }
             }
         }
@@ -201,8 +206,8 @@ internal sealed class HuskyChrome : Container
             if (health is not null)
                 return ($" {health} ", HealthColour(health));
             if (name is null)
-                return (" (starting…) ", Color.DarkGray);
-            return (string.Empty, Color.Black);
+                return (" (starting…) ", Color.LightGray);
+            return (string.Empty, Color.LightGray);
         }
 
         private static Color HealthColour(string status) => status switch
