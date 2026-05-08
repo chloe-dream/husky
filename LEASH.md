@@ -997,25 +997,31 @@ The default rendering on an interactive terminal.
 
 #### Layout
 
+The chrome is rendered on a uniform black background. Two thin
+horizontal rules — full-width `─` (U+2500) in dim grey — bracket the
+log viewport instead of header/footer fill bands:
+
 ```
-┌──────────────────────────────────────────────────────────┐
-│ husky v0.3.2          umbrella-bot v1.4.2     healthy │  header (1 row)
-├──────────────────────────────────────────────────────────┤
-│ 13:47:03  husky    sniffing for updates… up to date.     │
-│ 13:47:08  app      worker started, 12 guilds connected   │
-│ 13:47:15  husky    new version found: v1.4.3             │  log viewport
-│ 13:47:15  husky    manual mode — waiting for trigger.    │  (star-sized)
-│ …                                                     ▓  │
-├──────────────────────────────────────────────────────────┤
-│ c copy logs · u update now · x exit                      │  action bar (1 row)
-└──────────────────────────────────────────────────────────┘
+ husky v0.3.2          umbrella-bot v1.4.2                healthy   header (1 row)
+─────────────────────────────────────────────────────────────────  separator (1 row)
+ 13:47:03  husky    sniffing for updates… up to date.
+ 13:47:08  app      worker started, 12 guilds connected             log viewport
+ 13:47:15  husky    new version found: v1.4.3                       (star-sized)
+ 13:47:15  husky    manual mode — waiting for trigger.
+ …                                                            ▓
+─────────────────────────────────────────────────────────────────  separator (1 row)
+ c copy logs · u update now · x exit                                action bar (1 row)
 ```
 
-- **Header** (1 row, top): `husky vX.Y.Z` left-aligned,
-  `<appName> v<appVersion>` centered, current health
-  (`healthy`/`degraded`/`unhealthy`) right-aligned. Pre-handshake
-  the center is `(starting…)`; while crash-restart-paused, the right
-  side reads `down — restarting in 3s`.
+- **Header** (1 row, top): `husky vX.Y.Z` left-aligned in the
+  launcher accent colour (cyan, bold); `<appName> v<appVersion>`
+  centered in white; current health (`healthy`/`degraded`/`unhealthy`)
+  right-aligned in its semantic colour. Pre-handshake the center is
+  `(starting…)` in dim grey; while crash-restart-paused, the right
+  side reads `down — restarting in 3s` in red.
+- **Separators** (1 row, top + bottom of viewport): `─` glyphs in
+  dim grey on black. They cost two rows of viewport but give the
+  chrome a clean DOS-style banded look without a busy bg fill.
 - **Log viewport** (fills): `Retro.Crt.Tui.LogViewer` with its own
   scrollbar, autoscroll while pinned to tail, drag/wheel/keyboard
   scrolling. Each line gets a single foreground colour matching its
@@ -1025,11 +1031,10 @@ The default rendering on an interactive terminal.
 - **Action bar** (1 row, bottom): three commands rendered as
   dot-separated hotkey hints (`c copy logs · u update now · x exit`).
   The hotkey letter is in the launcher's accent colour and bold; the
-  label is plain on the bar's dark background; the middle-dot
-  separator picks up the label colour. No focusable button widgets —
-  every command has a single-letter shortcut, so Tab cycling adds
-  nothing here. Activation runs through the chrome's global hotkey
-  routing.
+  label is light grey on black; the middle-dot separator picks up the
+  label colour. No focusable button widgets — every command has a
+  single-letter shortcut, so Tab cycling adds nothing here.
+  Activation runs through the chrome's global hotkey routing.
 
 #### Hotkeys
 

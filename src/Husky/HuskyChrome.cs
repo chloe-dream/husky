@@ -7,11 +7,11 @@ using Retro.Crt.Tui.Widgets;
 namespace Husky;
 
 /// <summary>
-/// Root container for <see cref="HuskyApp"/>. Lays out the three rows
-/// described in LEASH §10.4: a 1-row header, a fill-the-rest log
-/// viewport, and a 1-row action bar with three real focusable buttons.
-/// Owns the chrome-level hotkeys (c/u/x/Esc/Ctrl+C) that shadow the
-/// buttons so users can drive the TUI from the keyboard alone.
+/// Root container for <see cref="HuskyApp"/>. Lays out the five rows
+/// described in LEASH §10.4: a 1-row header, a 1-row separator, the
+/// fill-the-rest log viewport, a 1-row separator, and a 1-row action
+/// bar. Owns the chrome-level hotkeys (c/u/x/Esc/Ctrl+C) so users can
+/// drive the TUI from the keyboard alone.
 /// </summary>
 internal sealed class HuskyChrome : Container
 {
@@ -46,11 +46,21 @@ internal sealed class HuskyChrome : Container
         header = new HeaderView(launcherVersion);
         actionBar = new ActionBar(onCopyRequested, onUpdateRequested, onExitRequested);
 
+        // Black-on-black chrome with two horizontal rules instead of
+        // bg-fill bands. We trade two rows of log viewport for the
+        // visual breathing room of a fully unified background.
         body = new StackPanel
         {
             Orientation = Orientation.Vertical,
-            Sizes       = { LayoutSize.Cells(1), LayoutSize.Star(), LayoutSize.Cells(1) },
-            Children    = { header, log, actionBar },
+            Sizes       =
+            {
+                LayoutSize.Cells(1), // header
+                LayoutSize.Cells(1), // top separator
+                LayoutSize.Star(),   // log
+                LayoutSize.Cells(1), // bottom separator
+                LayoutSize.Cells(1), // action bar
+            },
+            Children    = { header, new Separator(), log, new Separator(), actionBar },
         };
         Children.Add(body);
     }
@@ -199,19 +209,19 @@ internal sealed class HuskyChrome : Container
                 localCrashRestart = crashRestart;
             }
 
-            // Header shares the action-bar's DarkGray background so the bars
-            // bookend the LogViewer with consistent chrome. Cyan stays as an
-            // accent on the launcher branding rather than as a full bar
-            // colour — pastel status colours (LightGreen / Yellow / LightRed)
-            // read poorly on a LightCyan fill.
+            // Black across the whole chrome — the LogViewer is also black,
+            // and the two horizontal separators above/below the log do the
+            // visual delimiting that the bars used to do via DarkGray fill.
+            // Status-word semantic colours (LightGreen / Yellow / LightRed)
+            // pop on black instead of fighting a DarkGray bg.
             screen.FillRect(b.X, b.Y, b.Width, b.Height,
-                new Cell(' ', Color.LightGray, Color.DarkGray));
+                new Cell(' ', Color.LightGray, Color.Black));
 
             // Left: launcher branding in the husky accent colour.
             string left = $" husky v{launcherVersion}";
             int leftLen = Math.Min(left.Length, b.Width);
             screen.PutString(b.X, b.Y, left.AsSpan(0, leftLen),
-                Color.LightCyan, Color.DarkGray, CellAttrs.Bold);
+                Color.LightCyan, Color.Black, CellAttrs.Bold);
 
             // Right: crash-restart override wins over live health. The
             // right slot stays empty pre-handshake; '(starting…)' lives
@@ -223,7 +233,7 @@ internal sealed class HuskyChrome : Container
             if (rightLen > 0 && rightX >= b.X + leftLen)
             {
                 screen.PutString(rightX, b.Y, right.text.AsSpan(0, rightLen),
-                    right.color, Color.DarkGray, CellAttrs.Bold);
+                    right.color, Color.Black, CellAttrs.Bold);
             }
 
             // Middle: app name + version, centered between the left and right
@@ -234,7 +244,7 @@ internal sealed class HuskyChrome : Container
             string mid = localName is null
                 ? "(starting…)"
                 : (localVer is null ? localName : $"{localName} v{localVer}");
-            Color midColor = localName is null ? Color.LightGray : Color.White;
+            Color midColor = localName is null ? Color.DarkGray : Color.White;
             int leftEnd = b.X + leftLen;
             int rightStart = rightLen > 0 ? rightX : b.X + b.Width;
             int slotStart = leftEnd + 1;
@@ -244,7 +254,7 @@ internal sealed class HuskyChrome : Container
             {
                 int midX = slotStart + (slotWidth - mid.Length) / 2;
                 screen.PutString(midX, b.Y, mid.AsSpan(),
-                    midColor, Color.DarkGray, CellAttrs.Bold);
+                    midColor, Color.Black, CellAttrs.Bold);
             }
         }
 
@@ -270,8 +280,8 @@ internal sealed class HuskyChrome : Container
     /// 1-row strip at the bottom showing the three commands as
     /// dot-separated hotkey hints (<c>c copy logs · u update now · x exit</c>).
     /// The hotkey letter is in the launcher's accent colour and bold; the
-    /// label is plain on the bar's dark background; the middle-dot
-    /// separator picks up the label colour. Activation goes through
+    /// label is plain on a black background; the middle-dot separator picks
+    /// up the label colour. Activation goes through
     /// <see cref="HuskyChrome.OnKey"/>'s global hotkeys — there are no
     /// focusable button widgets here, since Tab cycling adds nothing
     /// when every command already has a single-letter shortcut.
@@ -346,14 +356,14 @@ internal sealed class HuskyChrome : Container
             }
 
             screen.FillRect(b.X, b.Y, b.Width, b.Height,
-                new Cell(' ', Color.LightGray, Color.DarkGray));
+                new Cell(' ', Color.LightGray, Color.Black));
 
             if (localToast is not null)
             {
                 int toastLen = Math.Min(localToast.Length, b.Width - 2);
                 if (toastLen > 0)
                     screen.PutString(b.X + 1, b.Y, localToast.AsSpan(0, toastLen),
-                        localToastColor, Color.DarkGray, CellAttrs.Bold);
+                        localToastColor, Color.Black, CellAttrs.Bold);
                 _ = onCopy; _ = onUpdate; _ = onExit;
                 return;
             }
@@ -363,11 +373,11 @@ internal sealed class HuskyChrome : Container
             x = DrawCommand(screen, x, b.Y, max, "c", "copy logs", enabled: true);
             if (localState != UpdateActionState.Hidden)
             {
-                x = DrawSeparator(screen, x, b.Y, max);
+                x = DrawDotSeparator(screen, x, b.Y, max);
                 x = DrawCommand(screen, x, b.Y, max, "u", "update now",
                     enabled: localState == UpdateActionState.Enabled);
             }
-            x = DrawSeparator(screen, x, b.Y, max);
+            x = DrawDotSeparator(screen, x, b.Y, max);
             DrawCommand(screen, x, b.Y, max, "x", "exit", enabled: true);
 
             _ = onCopy; _ = onUpdate; _ = onExit;
@@ -377,39 +387,55 @@ internal sealed class HuskyChrome : Container
             ScreenBuffer screen, int x, int y, int max, string hotkey, string label, bool enabled)
         {
             // Disabled state dims both the hotkey letter and the label so
-            // the entry reads as 'present but inert' against the bar's
-            // dark background. Hotkey is still bold to keep the rhythm.
+            // the entry reads as 'present but inert' on the black bg.
+            // Hotkey stays bold to keep the rhythm.
             Color hotkeyColor = enabled ? Color.LightCyan : Color.DarkGray;
             Color labelColor  = enabled ? Color.LightGray : Color.DarkGray;
 
             int hkLen = Math.Min(hotkey.Length, max - x);
             if (hkLen > 0)
                 screen.PutString(x, y, hotkey.AsSpan(0, hkLen),
-                    hotkeyColor, Color.DarkGray, CellAttrs.Bold);
+                    hotkeyColor, Color.Black, CellAttrs.Bold);
             x += hkLen;
 
             if (x < max)
             {
-                screen.PutString(x, y, " ".AsSpan(), labelColor, Color.DarkGray);
+                screen.PutString(x, y, " ".AsSpan(), labelColor, Color.Black);
                 x += 1;
             }
 
             int lblLen = Math.Min(label.Length, max - x);
             if (lblLen > 0)
                 screen.PutString(x, y, label.AsSpan(0, lblLen),
-                    labelColor, Color.DarkGray);
+                    labelColor, Color.Black);
             return x + lblLen;
         }
 
-        private static int DrawSeparator(ScreenBuffer screen, int x, int y, int max)
+        private static int DrawDotSeparator(ScreenBuffer screen, int x, int y, int max)
         {
             // U+00B7 MIDDLE DOT, padded by a space on each side.
             const string Sep = " · ";
             int len = Math.Min(Sep.Length, max - x);
             if (len > 0)
                 screen.PutString(x, y, Sep.AsSpan(0, len),
-                    Color.LightGray, Color.DarkGray);
+                    Color.LightGray, Color.Black);
             return x + len;
+        }
+    }
+
+    /// <summary>
+    /// 1-row horizontal rule used between the header / log / action-bar
+    /// rows in place of bg-fill bands. Plain U+2500 box-drawing glyph
+    /// across the full width, dim against the chrome's black background.
+    /// </summary>
+    private sealed class Separator : View
+    {
+        public override void OnDraw(ScreenBuffer screen)
+        {
+            var b = Bounds;
+            if (b.Width <= 0 || b.Height <= 0) return;
+            screen.FillRect(b.X, b.Y, b.Width, b.Height,
+                new Cell('─', Color.DarkGray, Color.Black));
         }
     }
 }
