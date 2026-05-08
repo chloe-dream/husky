@@ -201,6 +201,13 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
 
     private void DrainPending()
     {
+        // §10.4 'autoscroll while pinned to tail': capture the user's pin
+        // state BEFORE we touch Items so a stream of incoming lines does
+        // not yank the viewport away from whatever they scrolled up to
+        // read. AutoScroll on the LogViewer is a static 'always follow'
+        // toggle — we drive it per-drain to get sticky-tail semantics.
+        logViewer.AutoScroll = IsScrolledToBottom();
+
         while (pending.TryDequeue(out PendingOp op))
         {
             string formatted = FormatLine(op.When, op.Source, op.Message);
@@ -250,6 +257,22 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
 
         while (logViewer.Items.Count > MaxLogItems)
             logViewer.Items.RemoveAt(0);
+    }
+
+    /// <summary>
+    /// True when the log viewer's scroll position is at (or past) the
+    /// last visible row of its current content — i.e., the user is
+    /// 'pinned to the tail' and should keep auto-following new entries.
+    /// We compute this from <c>Items.Count</c> rather than reading the
+    /// LogViewer's own ContentHeight so we don't depend on protected
+    /// internals; lines never wrap (LEASH §10.4) so one item == one row.
+    /// </summary>
+    private bool IsScrolledToBottom()
+    {
+        int contentHeight = logViewer.Items.Count;
+        int viewport = Math.Max(0, logViewer.Bounds.Height);
+        int maxOffset = Math.Max(0, contentHeight - viewport);
+        return logViewer.ScrollOffset >= maxOffset;
     }
 
     private static string FormatLine(DateTime when, string source, string message)
