@@ -7,11 +7,13 @@
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
 
     <!-- Husky.Protocol uses System.Text.Json source-gen contexts and
-         Retro.Crt is trim-clean by design, so the launcher publishes
-         under full trim. Single-file + compression on top brings the
-         release artifact from ~36 MB down to ~12 MB. Verified: banner
-         + ConsoleOutput render correctly after a trimmed run. -->
+         Retro.Crt is trim/AOT-clean by design, so the launcher publishes
+         under full trim and stays AOT-eligible. Single-file + compression
+         on top brings the release artifact from ~36 MB down to ~12 MB.
+         Verified: banner + ConsoleOutput render correctly after a trimmed
+         run. -->
     <IsTrimmable>true</IsTrimmable>
+    <IsAotCompatible>true</IsAotCompatible>
 
     <DebugType>embedded</DebugType>
   </PropertyGroup>
@@ -35,7 +37,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Retro.Crt" Version="0.7.0" />
+    <PackageReference Include="Retro.Crt" Version="0.7.1" />
     <PackageReference Include="Retro.Crt.Tui" Version="0.1.1" />
   </ItemGroup>
 
