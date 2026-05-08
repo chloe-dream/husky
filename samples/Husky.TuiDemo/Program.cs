@@ -35,6 +35,7 @@ using var demoCts = new CancellationTokenSource();
 HuskyApp app = null!;
 app = new HuskyApp(
     "0.3.2-demo",
+    Directory.GetCurrentDirectory(),
     onUpdateRequested: () =>
     {
         // The demo has no real update flow; just surface the click so the

@@ -36,6 +36,12 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
     // lives on `inPlaceClaimed` below and runs from background threads.
     private bool tailIsInPlace;
 
+    // §10.7: the in-memory log buffer is capped so a chatty app can't
+    // grow memory unbounded over a long-running session. Oldest entries
+    // drop first; the user can still snapshot the buffer via [c] before
+    // the cap kicks in.
+    private const int MaxLogItems = 5_000;
+
     // 0 = no in-place line, 1 = one is open. Flipped via Interlocked so a
     // second concurrent BeginInPlaceLine throws cleanly per LEASH §10.6.
     private int inPlaceClaimed;
@@ -43,15 +49,20 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
     private readonly LogViewer logViewer;
     private readonly HuskyChrome chrome;
     private readonly Application application;
+    private readonly string workingDirectory;
 
     public HuskyApp(
         string launcherVersion,
+        string workingDirectory,
         Action onUpdateRequested,
         Action onExitRequested)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(launcherVersion);
+        ArgumentException.ThrowIfNullOrWhiteSpace(workingDirectory);
         ArgumentNullException.ThrowIfNull(onUpdateRequested);
         ArgumentNullException.ThrowIfNull(onExitRequested);
+
+        this.workingDirectory = workingDirectory;
 
         logViewer = new LogViewer
         {
@@ -72,6 +83,11 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
             onExitRequested: onExitRequested);
 
         application = new Application(chrome);
+        // §10.4: 'Default focus: log viewport, pinned to tail.' Without
+        // this the first focusable widget wins, which depending on the
+        // chrome's layout could be something else after future widgets
+        // land. Be explicit.
+        application.SetFocus(logViewer);
     }
 
     /// <summary>
@@ -124,7 +140,9 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
             snapshot.Add(entry.Text ?? string.Empty);
 
         string fileName = $"husky-logs-{DateTime.UtcNow:yyyy-MM-ddTHH-mm-ss}Z.txt";
-        string path = Path.Combine(Directory.GetCurrentDirectory(), fileName);
+        // §10.4: copy-logs lands in the resolved working directory, not
+        // the process's CWD — `--dir` may have pointed Husky elsewhere.
+        string path = Path.Combine(workingDirectory, fileName);
 
         Task.Run(() =>
         {
@@ -220,6 +238,9 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
                     break;
             }
         }
+
+        while (logViewer.Items.Count > MaxLogItems)
+            logViewer.Items.RemoveAt(0);
     }
 
     private static string FormatLine(DateTime when, string source, string message)

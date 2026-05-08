@@ -171,8 +171,10 @@ internal sealed class HuskyChrome : Container
             screen.PutString(b.X, b.Y, left.AsSpan(0, leftLen),
                 Color.LightCyan, Color.DarkGray, CellAttrs.Bold);
 
-            // Right: health status, or a status hint while no app is attached.
-            (string text, Color color) right = ResolveRightSlot(localName, localHealth);
+            // Right: only the live health status. The right slot stays
+            // empty pre-handshake; '(starting…)' lives in the center per
+            // §10.4 so the bar is symmetrical even before the first hello.
+            (string text, Color color) right = ResolveRightSlot(localHealth);
             int rightLen = Math.Min(right.text.Length, b.Width - leftLen);
             int rightX = b.X + b.Width - rightLen;
             if (rightLen > 0 && rightX >= b.X + leftLen)
@@ -182,31 +184,31 @@ internal sealed class HuskyChrome : Container
             }
 
             // Middle: app name + version, centered between the left and right
-            // slots. Drop entirely when the slot can't fit the full text — a
-            // truncated app-name is worse than no name.
-            if (localName is not null)
+            // slots. Pre-handshake (§10.4) the centre reads '(starting…)'
+            // until the first hello populates name/version. The slot drops
+            // entirely when it can't fit the full text — a truncated
+            // app-name is worse than no name.
+            string mid = localName is null
+                ? "(starting…)"
+                : (localVer is null ? localName : $"{localName} v{localVer}");
+            Color midColor = localName is null ? Color.LightGray : Color.White;
+            int leftEnd = b.X + leftLen;
+            int rightStart = rightLen > 0 ? rightX : b.X + b.Width;
+            int slotStart = leftEnd + 1;
+            int slotEnd = rightStart - 1;
+            int slotWidth = slotEnd - slotStart;
+            if (slotWidth >= mid.Length)
             {
-                string mid = localVer is null ? localName : $"{localName} v{localVer}";
-                int leftEnd = b.X + leftLen;
-                int rightStart = rightLen > 0 ? rightX : b.X + b.Width;
-                int slotStart = leftEnd + 1;
-                int slotEnd = rightStart - 1;
-                int slotWidth = slotEnd - slotStart;
-                if (slotWidth >= mid.Length)
-                {
-                    int midX = slotStart + (slotWidth - mid.Length) / 2;
-                    screen.PutString(midX, b.Y, mid.AsSpan(),
-                        Color.White, Color.DarkGray, CellAttrs.Bold);
-                }
+                int midX = slotStart + (slotWidth - mid.Length) / 2;
+                screen.PutString(midX, b.Y, mid.AsSpan(),
+                    midColor, Color.DarkGray, CellAttrs.Bold);
             }
         }
 
-        private static (string text, Color color) ResolveRightSlot(string? name, string? health)
+        private static (string text, Color color) ResolveRightSlot(string? health)
         {
             if (health is not null)
                 return ($" {health} ", HealthColour(health));
-            if (name is null)
-                return (" (starting…) ", Color.LightGray);
             return (string.Empty, Color.LightGray);
         }
 

@@ -192,15 +192,18 @@ LauncherRuntime runtime = new(
 // Step 7 — pick the rendering mode. TUI mode (LEASH §10.4) requires a
 // real interactive terminal; piping or redirection forces line mode
 // (LEASH §10.3) so `husky | grep` and `husky > log.txt` keep working.
-// Construction failures (very old console host, no ANSI, raw-mode
-// blocked) fall back to line mode without complaining.
+// `NO_COLOR` (https://no-color.org/) also forces line mode — the user
+// has asked to disable styling, and a fullscreen alt-screen UI is the
+// opposite of that. Construction failures (very old console host, no
+// ANSI, raw-mode blocked) fall back to line mode without complaining.
 HuskyApp? tuiApp = null;
-if (!Console.IsOutputRedirected)
+if (!Console.IsOutputRedirected && !IsNoColorRequested())
 {
     try
     {
         tuiApp = new HuskyApp(
             launcherVersion,
+            workingDirectory,
             onUpdateRequested: runtime.RequestUpdateNow,
             onExitRequested: () =>
             {
@@ -260,6 +263,9 @@ static string GetLauncherVersion()
         ? asm.GetName().Version?.ToString() ?? "0.0.0"
         : info;
 }
+
+static bool IsNoColorRequested() =>
+    !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("NO_COLOR"));
 
 static string ResolveWorkingDirectory(string? overrideDir)
 {
