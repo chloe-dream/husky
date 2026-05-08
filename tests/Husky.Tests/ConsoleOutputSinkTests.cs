@@ -142,8 +142,12 @@ public sealed class ConsoleOutputSinkTests
         public string? AppName { get; private set; }
         public string? AppVersion { get; private set; }
         public string? Health { get; private set; }
+        public string? CrashRestart { get; private set; }
+        public UpdateActionState UpdateActionState { get; private set; }
         public int AppInfoUpdates { get; private set; }
         public int HealthUpdates { get; private set; }
+        public int CrashRestartUpdates { get; private set; }
+        public int UpdateActionStateUpdates { get; private set; }
 
         public void SetAppInfo(string? appName, string? appVersion)
         {
@@ -156,6 +160,18 @@ public sealed class ConsoleOutputSinkTests
         {
             Health = status;
             HealthUpdates++;
+        }
+
+        public void SetCrashRestart(string? message)
+        {
+            CrashRestart = message;
+            CrashRestartUpdates++;
+        }
+
+        public void SetUpdateActionState(UpdateActionState state)
+        {
+            UpdateActionState = state;
+            UpdateActionStateUpdates++;
         }
 
         private sealed class NullScope : IDisposable

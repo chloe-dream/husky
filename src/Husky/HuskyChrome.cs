@@ -21,6 +21,7 @@ internal sealed class HuskyChrome : Container
     private readonly Action onExitRequested;
     private readonly StackPanel body;
     private readonly HeaderView header;
+    private readonly ActionBar actionBar;
 
     public HuskyChrome(
         string launcherVersion,
@@ -43,7 +44,7 @@ internal sealed class HuskyChrome : Container
         this.onExitRequested = onExitRequested;
 
         header = new HeaderView(launcherVersion);
-        var actionBar = new ActionBar(onCopyRequested, onUpdateRequested, onExitRequested);
+        actionBar = new ActionBar(onCopyRequested, onUpdateRequested, onExitRequested);
 
         body = new StackPanel
         {
@@ -65,6 +66,35 @@ internal sealed class HuskyChrome : Container
     public void SetHealth(string? status)
     {
         header.SetHealth(status);
+        MarkDirty();
+    }
+
+    /// <summary>
+    /// Override the header's right slot with a crash-restart message
+    /// (e.g., <c>down — restarting in 3s</c>). Pass <c>null</c> to clear
+    /// and revert to the health slot. Safe from any thread.
+    /// </summary>
+    public void SetCrashRestart(string? message)
+    {
+        header.SetCrashRestart(message);
+        MarkDirty();
+    }
+
+    /// <summary>Update the action-bar <c>[u]</c> visibility / styling.</summary>
+    public void SetUpdateActionState(UpdateActionState state)
+    {
+        actionBar.SetUpdateActionState(state);
+        MarkDirty();
+    }
+
+    /// <summary>
+    /// Replace the action bar's hotkey hints with a transient toast for
+    /// <paramref name="duration"/> (default 3s, per LEASH §10.4). Safe
+    /// from any thread; the bar reverts on its own when the timer fires.
+    /// </summary>
+    public void ShowActionBarToast(string text, Color color, TimeSpan? duration = null)
+    {
+        actionBar.ShowToast(text, color, duration ?? TimeSpan.FromSeconds(3));
         MarkDirty();
     }
 
@@ -131,6 +161,11 @@ internal sealed class HuskyChrome : Container
         private string? appName;
         private string? appVersion;
         private string? health;
+        // Set during a crash-restart pause (LEASH §10.4). When non-null
+        // it takes priority over `health` for the right slot and renders
+        // in red — the launcher tickles it once a second with the
+        // remaining countdown text.
+        private string? crashRestart;
 
         public void SetAppInfo(string? name, string? version)
         {
@@ -144,17 +179,24 @@ internal sealed class HuskyChrome : Container
             MarkDirty();
         }
 
+        public void SetCrashRestart(string? message)
+        {
+            lock (stateLock) { crashRestart = message; }
+            MarkDirty();
+        }
+
         public override void OnDraw(ScreenBuffer screen)
         {
             var b = Bounds;
             if (b.Width <= 0 || b.Height <= 0) return;
 
-            string? localName, localVer, localHealth;
+            string? localName, localVer, localHealth, localCrashRestart;
             lock (stateLock)
             {
                 localName = appName;
                 localVer = appVersion;
                 localHealth = health;
+                localCrashRestart = crashRestart;
             }
 
             // Header shares the action-bar's DarkGray background so the bars
@@ -171,10 +213,11 @@ internal sealed class HuskyChrome : Container
             screen.PutString(b.X, b.Y, left.AsSpan(0, leftLen),
                 Color.LightCyan, Color.DarkGray, CellAttrs.Bold);
 
-            // Right: only the live health status. The right slot stays
-            // empty pre-handshake; '(starting…)' lives in the center per
-            // §10.4 so the bar is symmetrical even before the first hello.
-            (string text, Color color) right = ResolveRightSlot(localHealth);
+            // Right: crash-restart override wins over live health. The
+            // right slot stays empty pre-handshake; '(starting…)' lives
+            // in the center per §10.4 so the bar is symmetrical even
+            // before the first hello.
+            (string text, Color color) right = ResolveRightSlot(localHealth, localCrashRestart);
             int rightLen = Math.Min(right.text.Length, b.Width - leftLen);
             int rightX = b.X + b.Width - rightLen;
             if (rightLen > 0 && rightX >= b.X + leftLen)
@@ -205,8 +248,10 @@ internal sealed class HuskyChrome : Container
             }
         }
 
-        private static (string text, Color color) ResolveRightSlot(string? health)
+        private static (string text, Color color) ResolveRightSlot(string? health, string? crashRestart)
         {
+            if (crashRestart is not null)
+                return ($" {crashRestart} ", Color.LightRed);
             if (health is not null)
                 return ($" {health} ", HealthColour(health));
             return (string.Empty, Color.LightGray);
@@ -233,52 +278,126 @@ internal sealed class HuskyChrome : Container
     /// </summary>
     private sealed class ActionBar(Action onCopy, Action onUpdate, Action onExit) : View
     {
-        // Suppress 'declared but unused' — these stay assigned in case a
-        // future commit adds OnMouse hit-test handling per region.
         private readonly Action onCopy = onCopy;
         private readonly Action onUpdate = onUpdate;
         private readonly Action onExit = onExit;
+
+        private readonly object stateLock = new();
+        // [u] visibility / styling, driven by the launcher's view of the
+        // connected app's capabilities + the cached UpdateInfo.
+        private UpdateActionState updateState;
+        // Transient status replacement that takes the bar over for a few
+        // seconds (e.g., the [c] copy-logs confirmation). Supersession
+        // is handled with a monotonically-incrementing generation
+        // counter: each ShowToast bumps it, and the old fire-and-forget
+        // clear-task only acts when its generation still matches.
+        private int toastGeneration;
+        private string? toastText;
+        private Color toastColor;
+
+        public void SetUpdateActionState(UpdateActionState state)
+        {
+            lock (stateLock) updateState = state;
+            MarkDirty();
+        }
+
+        public void ShowToast(string text, Color color, TimeSpan duration)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(text);
+            int generation;
+            lock (stateLock)
+            {
+                generation = ++toastGeneration;
+                toastText = text;
+                toastColor = color;
+            }
+            MarkDirty();
+            _ = ClearAfterAsync(generation, duration);
+        }
+
+        private async Task ClearAfterAsync(int generation, TimeSpan duration)
+        {
+            try { await Task.Delay(duration).ConfigureAwait(false); }
+            catch { return; }
+
+            lock (stateLock)
+            {
+                // Bail if a fresh ShowToast superseded us during the wait.
+                if (toastGeneration != generation) return;
+                toastText = null;
+                toastColor = default;
+            }
+            MarkDirty();
+        }
 
         public override void OnDraw(ScreenBuffer screen)
         {
             var b = Bounds;
             if (b.Width <= 0 || b.Height <= 0) return;
 
+            UpdateActionState localState;
+            string? localToast;
+            Color localToastColor;
+            lock (stateLock)
+            {
+                localState = updateState;
+                localToast = toastText;
+                localToastColor = toastColor;
+            }
+
             screen.FillRect(b.X, b.Y, b.Width, b.Height,
                 new Cell(' ', Color.LightGray, Color.DarkGray));
 
+            if (localToast is not null)
+            {
+                int toastLen = Math.Min(localToast.Length, b.Width - 2);
+                if (toastLen > 0)
+                    screen.PutString(b.X + 1, b.Y, localToast.AsSpan(0, toastLen),
+                        localToastColor, Color.DarkGray, CellAttrs.Bold);
+                _ = onCopy; _ = onUpdate; _ = onExit;
+                return;
+            }
+
             int x = b.X + 1;
             int max = b.X + b.Width;
-            x = DrawCommand(screen, x, b.Y, max, "c", "copy logs");
+            x = DrawCommand(screen, x, b.Y, max, "c", "copy logs", enabled: true);
+            if (localState != UpdateActionState.Hidden)
+            {
+                x = DrawSeparator(screen, x, b.Y, max);
+                x = DrawCommand(screen, x, b.Y, max, "u", "update now",
+                    enabled: localState == UpdateActionState.Enabled);
+            }
             x = DrawSeparator(screen, x, b.Y, max);
-            x = DrawCommand(screen, x, b.Y, max, "u", "update now");
-            x = DrawSeparator(screen, x, b.Y, max);
-            DrawCommand(screen, x, b.Y, max, "x", "exit");
+            DrawCommand(screen, x, b.Y, max, "x", "exit", enabled: true);
 
-            // Reference the action fields so the analyser doesn't flag them
-            // as unused before the OnMouse hit-test work lands.
             _ = onCopy; _ = onUpdate; _ = onExit;
         }
 
         private static int DrawCommand(
-            ScreenBuffer screen, int x, int y, int max, string hotkey, string label)
+            ScreenBuffer screen, int x, int y, int max, string hotkey, string label, bool enabled)
         {
+            // Disabled state dims both the hotkey letter and the label so
+            // the entry reads as 'present but inert' against the bar's
+            // dark background. Hotkey is still bold to keep the rhythm.
+            Color hotkeyColor = enabled ? Color.LightCyan : Color.DarkGray;
+            Color labelColor  = enabled ? Color.LightGray : Color.DarkGray;
+
             int hkLen = Math.Min(hotkey.Length, max - x);
             if (hkLen > 0)
                 screen.PutString(x, y, hotkey.AsSpan(0, hkLen),
-                    Color.LightCyan, Color.DarkGray, CellAttrs.Bold);
+                    hotkeyColor, Color.DarkGray, CellAttrs.Bold);
             x += hkLen;
 
             if (x < max)
             {
-                screen.PutString(x, y, " ".AsSpan(), Color.LightGray, Color.DarkGray);
+                screen.PutString(x, y, " ".AsSpan(), labelColor, Color.DarkGray);
                 x += 1;
             }
 
             int lblLen = Math.Min(label.Length, max - x);
             if (lblLen > 0)
                 screen.PutString(x, y, label.AsSpan(0, lblLen),
-                    Color.LightGray, Color.DarkGray);
+                    labelColor, Color.DarkGray);
             return x + lblLen;
         }
 

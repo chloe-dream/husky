@@ -212,8 +212,23 @@ internal sealed class LauncherRuntime(
             }
 
             ConsoleOutput.Husky($"pausing {config.RestartPauseSec}s before restart.");
-            try { await Task.Delay(TimeSpan.FromSeconds(config.RestartPauseSec), graceful).ConfigureAwait(false); }
-            catch (OperationCanceledException) { return ExitCodes.Ok; }
+            try
+            {
+                // §10.4: while we're between crash and restart, the
+                // header's right slot reads 'down — restarting in Ns'
+                // in red. Tickle once a second so the countdown is live.
+                for (int s = config.RestartPauseSec; s > 0; s--)
+                {
+                    ConsoleOutput.SetCrashRestart($"down — restarting in {s}s");
+                    await Task.Delay(TimeSpan.FromSeconds(1), graceful).ConfigureAwait(false);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                ConsoleOutput.SetCrashRestart(null);
+                return ExitCodes.Ok;
+            }
+            ConsoleOutput.SetCrashRestart(null);
 
             restartPolicy.RecordAttempt();
             try
@@ -289,6 +304,7 @@ internal sealed class LauncherRuntime(
         // was found — apps in manual mode may call update-check at any time.
         cachedUpdate = update;
         UpdateAppSessionCache(session, version, update);
+        RefreshUpdateActionState();
 
         if (update is null) return;
 
@@ -334,6 +350,7 @@ internal sealed class LauncherRuntime(
             restartPolicy.Reset();
             cachedUpdate = null;
             lastPushedManualVersion = null;
+            RefreshUpdateActionState();
             ConsoleOutput.Husky($"update succeeded — now on v{update.Version}");
             mark.TrySetResult(true);
         }
@@ -407,6 +424,7 @@ internal sealed class LauncherRuntime(
 
         cachedUpdate = update;
         UpdateAppSessionCache(session, version, update);
+        RefreshUpdateActionState();
 
         ConsoleOutput.Husky(
             update is null
@@ -498,7 +516,27 @@ internal sealed class LauncherRuntime(
         ConsoleOutput.SetAppInfo(session.ConnectedApp.Name, session.ConnectedApp.Version);
         ConsoleOutput.SetHealth(null);
         SetCurrentSession(session);
+        RefreshUpdateActionState();
         return session;
+    }
+
+    /// <summary>
+    /// Push the current <see cref="UpdateActionState"/> at the TUI's
+    /// action bar (LEASH §10.4): hidden when no app or no
+    /// <c>manual-updates</c> capability, disabled when the capability is
+    /// there but no <see cref="UpdateInfo"/> is cached, enabled when both
+    /// align. Called whenever the session changes or
+    /// <see cref="cachedUpdate"/> is written.
+    /// </summary>
+    private void RefreshUpdateActionState()
+    {
+        AppSession? session = CurrentSession;
+        UpdateActionState state = session is null || !session.ConnectedApp.SupportsManualUpdates
+            ? UpdateActionState.Hidden
+            : cachedUpdate is null
+                ? UpdateActionState.Disabled
+                : UpdateActionState.Enabled;
+        ConsoleOutput.SetUpdateActionState(state);
     }
 
     private async Task StopCurrentSessionAsync(CancellationToken ct)
@@ -583,10 +621,12 @@ internal sealed class LauncherRuntime(
             toDispose = currentSession;
             currentSession = null;
         }
-        // Header reverts to its pre-attach state so the right slot reads
-        // '(starting…)' until the next session's hello lands.
+        // Header reverts to its pre-attach state so the centre reads
+        // '(starting…)' until the next session's hello lands; the
+        // action bar's [u] hint disappears with no app to target.
         ConsoleOutput.SetAppInfo(null, null);
         ConsoleOutput.SetHealth(null);
+        ConsoleOutput.SetUpdateActionState(UpdateActionState.Hidden);
         if (toDispose is not null)
             await toDispose.DisposeAsync().ConfigureAwait(false);
     }

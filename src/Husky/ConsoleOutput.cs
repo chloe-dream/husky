@@ -129,6 +129,28 @@ internal static partial class ConsoleOutput
     public static void SetHealth(string? status) => sink.SetHealth(status);
 
     /// <summary>
+    /// Override the TUI header's right slot with a crash-restart status
+    /// line (LEASH §10.4: <c>down — restarting in 3s</c>). While set, this
+    /// takes priority over any value from <see cref="SetHealth"/>; the
+    /// launcher tickles it once a second during the restart-pause loop
+    /// and clears it before bringing the app back up. Pass <c>null</c> to
+    /// release the override and revert to the health slot. No-op in line
+    /// mode — the line-mode banner doesn't carry a transient status.
+    /// </summary>
+    public static void SetCrashRestart(string? message) => sink.SetCrashRestart(message);
+
+    /// <summary>
+    /// Update the TUI action bar's <c>[u]</c> visibility (LEASH §10.4):
+    /// hidden when the app doesn't advertise <c>manual-updates</c>,
+    /// greyed when no update is cached, accent-coloured when an update is
+    /// queued. The launcher pushes this whenever the connected session,
+    /// its capabilities, or the cached <see cref="UpdateInfo"/> changes.
+    /// No-op in line mode.
+    /// </summary>
+    public static void SetUpdateActionState(UpdateActionState state) =>
+        sink.SetUpdateActionState(state);
+
+    /// <summary>
     /// Build the rendered line as a list of (text, color) segments. Pure and
     /// allocation-bounded; the test suite drives this directly to verify the
     /// timestamp format, source padding, and status-word highlighting without
@@ -244,6 +266,19 @@ internal static partial class ConsoleOutput
 
         /// <summary>Set the header's health slot (TUI only).</summary>
         void SetHealth(string? status);
+
+        /// <summary>
+        /// Override the header's right slot with a crash-restart status
+        /// (TUI only). Takes priority over <see cref="SetHealth"/> while
+        /// set; <c>null</c> clears the override.
+        /// </summary>
+        void SetCrashRestart(string? message);
+
+        /// <summary>
+        /// Update the action-bar <c>[u]</c> hint visibility / styling
+        /// (TUI only). See <see cref="UpdateActionState"/>.
+        /// </summary>
+        void SetUpdateActionState(UpdateActionState state);
     }
 
     /// <summary>
@@ -315,6 +350,8 @@ internal static partial class ConsoleOutput
         // launcher branding and there is no header band to update.
         public void SetAppInfo(string? appName, string? appVersion) { _ = appName; _ = appVersion; }
         public void SetHealth(string? status) { _ = status; }
+        public void SetCrashRestart(string? message) { _ = message; }
+        public void SetUpdateActionState(UpdateActionState state) { _ = state; }
 
         private static void WriteLineNow(
             DateTime when, string source, Color sourceColor, string message, Color? messageColor)

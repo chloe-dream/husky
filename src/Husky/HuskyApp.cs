@@ -122,6 +122,11 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
 
     public void SetHealth(string? status) => chrome.SetHealth(status);
 
+    public void SetCrashRestart(string? message) => chrome.SetCrashRestart(message);
+
+    public void SetUpdateActionState(UpdateActionState state) =>
+        chrome.SetUpdateActionState(state);
+
     /// <summary>
     /// Snapshot the current <see cref="LogViewer"/> contents and write them
     /// to <c>husky-logs-&lt;UTC-timestamp&gt;.txt</c> in the working
@@ -149,15 +154,19 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
             try
             {
                 File.WriteAllLines(path, snapshot);
-                ConsoleOutput.Husky(
+                // §10.4: feedback lands as a 3s status-bar replacement,
+                // not a log line — the user just dumped the buffer to
+                // disk, dropping a confirmation back into the same
+                // buffer would be noise.
+                chrome.ShowActionBarToast(
                     $"wrote {snapshot.Count} lines → {fileName}",
-                    messageColor: Color.LightGreen);
+                    Color.LightGreen);
             }
             catch (Exception ex)
             {
-                ConsoleOutput.Husky(
+                chrome.ShowActionBarToast(
                     $"copy logs failed: {ex.Message}",
-                    messageColor: Color.Yellow);
+                    Color.Yellow);
             }
         });
     }
