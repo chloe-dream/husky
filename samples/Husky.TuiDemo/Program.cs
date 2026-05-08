@@ -8,6 +8,11 @@ using Retro.Crt;
 // ConsoleOutput's sink, and drives a scripted fixture loop on a background
 // task.
 //
+// Pre-TUI (line mode, before the alt-screen takeover):
+//   0. ascii banner with ice-blue → cyan gradient + a brief 'sniffing for
+//      updates' spinner that disposes silently before the alt-screen kicks
+//      in — matches how prod's Program.cs warms up before HuskyApp.Run.
+//
 // The fixtures cover, in order:
 //   1. boot sequence (5 quick husky lines, header populates, [u] greys
 //      because 'manual-updates' is supported but no update is cached).
@@ -58,6 +63,20 @@ app = new HuskyApp(
         // blocking the main thread, so [x]/Esc would silently 'do nothing'.
         app.Dismiss();
     });
+
+// Match the production pre-TUI sequence (LEASH §10.3): banner + a brief
+// 'sniffing for updates' line-mode spinner before the alt-screen takeover.
+// The default CrtConsoleSink renders these into the real terminal; Run()
+// then installs the alt-screen and restores this view on exit.
+Husky.Banner.Render("0.3.2-demo");
+using (var bootSpinner = new InPlaceSpinner("sniffing for updates"))
+{
+    await Task.Delay(1200).ConfigureAwait(false);
+    // Silent dispose — the in-TUI BootSequenceAsync owns the result line,
+    // matching how LauncherRuntime announces 'up to date.' / 'new version
+    // found' inside the alt-screen.
+}
+
 ConsoleOutput.SetSink(app);
 
 Task fixtureTask = Task.Run(() => RunFixturesAsync(demoCts.Token));
