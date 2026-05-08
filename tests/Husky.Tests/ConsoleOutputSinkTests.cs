@@ -191,7 +191,11 @@ public sealed class ConsoleOutputSinkTests
         public Color? CompletedColor { get; private set; }
         public bool Disposed { get; private set; }
 
+        public List<string> ForcedUpdates { get; } = [];
+
         public void Update(string message) => Updates.Add(message);
+
+        public void UpdateNow(string message) => ForcedUpdates.Add(message);
 
         public void Complete(string finalMessage, Color? finalMessageColor = null)
         {

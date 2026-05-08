@@ -44,6 +44,11 @@ internal sealed class ProgressBarDownloadSink : IDownloadProgress, IDisposable
     {
         if (line is null) return;
 
+        // §10.6: guarantee the 100% frame even if the throttle would have
+        // dropped the last OnAdvanced. The summary then immediately
+        // replaces it on the next render tick.
+        line.UpdateNow(BuildBarMessage(bytesReceived, totalKnown));
+
         line.Complete(
             $"fetched {HumanBytes.Format(bytesReceived)} in {FormatDuration(duration)}.",
             Color.LightGreen);

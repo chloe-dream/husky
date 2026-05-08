@@ -324,6 +324,16 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
             owner.EnqueueUpdate(when, source, sourceColor, message);
         }
 
+        public void UpdateNow(string message)
+        {
+            if (completed || disposed) return;
+            // §10.6: 0% / 100% frame guarantee — bypass the throttle so the
+            // final progress frame always lands before the Complete summary
+            // replaces it.
+            lastUpdateTick = Environment.TickCount64;
+            owner.EnqueueUpdate(when, source, sourceColor, message);
+        }
+
         public void Complete(string finalMessage, Color? finalMessageColor = null)
         {
             if (completed) return;

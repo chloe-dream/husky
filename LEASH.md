@@ -975,7 +975,7 @@ HH:mm:ss  <source>  <message>
 - `<source>`: fixed width 8 chars (right-padded), color-coded by source:
   - `husky` → cyan
   - `app` → green (stdout) / red (stderr)
-  - `pipe` → dim (only when verbose-debug is opted in)
+  - `pipe` → dim (low-level transport diagnostics)
 - `<message>`: default foreground, with status-word highlights
   (e.g. `up` green, `down` red, `degraded` yellow, `growling` yellow).
 

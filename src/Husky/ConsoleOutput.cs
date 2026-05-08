@@ -220,9 +220,15 @@ internal static partial class ConsoleOutput
     internal interface IInPlaceLine : IDisposable
     {
         /// <summary>Replace the in-place line's message. Implementations may
-        /// throttle to a few Hz; the start frame and the most recent message
-        /// before <see cref="Complete"/> are always rendered.</summary>
+        /// throttle to a few Hz; the start frame is always rendered and the
+        /// caller is expected to flush the final frame via <see cref="UpdateNow"/>
+        /// before <see cref="Complete"/> if it matters.</summary>
         void Update(string message);
+
+        /// <summary>Same as <see cref="Update"/> but bypasses any frame-rate
+        /// throttle. Used to satisfy LEASH §10.6's 0% / 100% frame guarantee
+        /// when the caller knows this is the final progress frame.</summary>
+        void UpdateNow(string message);
 
         /// <summary>Replace the in-place line one final time and release the
         /// in-place gate. The completion message renders unconditionally
@@ -423,6 +429,7 @@ internal static partial class ConsoleOutput
             private bool disposed;
 
             public void Update(string message) { _ = message; /* §10.3 auto-degrade */ }
+            public void UpdateNow(string message) { _ = message; /* §10.3 auto-degrade */ }
 
             public void Complete(string finalMessage, Color? finalMessageColor = null)
             {

@@ -9,20 +9,26 @@ using Retro.Crt;
 // task.
 //
 // The fixtures cover, in order:
-//   1. boot sequence (5 quick husky lines).
+//   1. boot sequence (5 quick husky lines, header populates, [u] greys
+//      because 'manual-updates' is supported but no update is cached).
 //   2. heartbeat-style app stdout ticks.
 //   3. watchdog pong updates with status words.
 //   4. mixed status palette (up / down / healthy / degraded).
 //   5. force-true growl escalation (the dog barks audibly).
-//   6. animated InPlaceSpinner cycle ('sniffing for updates' → result).
+//   6. animated InPlaceSpinner cycle ('sniffing for updates' → result),
+//      flips [u] from greyed to accent on cached UpdateInfo.
 //   7. extra-long line to verify LogViewer clipping (no wrapping).
 //   8. fake download driving the real ProgressBarDownloadSink so the
-//      in-place line (LEASH §10.6) animates against the live LogViewer.
+//      in-place line (LEASH §10.6) animates against the live LogViewer
+//      and the 100 % frame lands via the throttle-bypassing UpdateNow.
 //   9. animated InPlaceSpinner with intermediate UpdateLabel
 //      (graceful-shutdown style: 'asking app to sit' → 'no ack' → 'sat down').
-//  10. 200-line burst to verify the ConcurrentQueue drain keeps up.
+//  10. fake crash + 5-second restart-pause countdown — header's right
+//      slot reads 'down — restarting in Ns' in red while [u] hides.
+//  11. 200-line burst to verify the ConcurrentQueue drain keeps up.
 //
-// After the burst the demo idles. Press Esc to exit.
+// After the burst the demo idles. Press [c] for the copy-logs toast,
+// [u] for an update-now log line, Esc to exit.
 //
 // Run with: dotnet run --project samples/Husky.TuiDemo
 
@@ -77,6 +83,7 @@ static async Task RunFixturesAsync(CancellationToken ct)
         await FakeSniffingAsync(ct).ConfigureAwait(false);
         await FakeDownloadAsync(ct).ConfigureAwait(false);
         await FakeShutdownAsync(ct).ConfigureAwait(false);
+        await FakeCrashRestartAsync(ct).ConfigureAwait(false);
         await BurstAsync(ct).ConfigureAwait(false);
         await IdleAsync(ct).ConfigureAwait(false);
     }
@@ -95,6 +102,10 @@ static async Task BootSequenceAsync(CancellationToken ct)
     await Task.Delay(400, ct).ConfigureAwait(false);
     // Header populates the moment the synthetic 'hello' lands.
     ConsoleOutput.SetAppInfo("demo-app", "1.4.2");
+    // Demo app advertises the manual-updates capability but no update is
+    // cached yet, so [u] renders greyed (Disabled). The header's right
+    // slot stays empty until the first pong.
+    ConsoleOutput.SetUpdateActionState(UpdateActionState.Disabled);
     ConsoleOutput.AppOut("demo-app: bootstrap complete");
     await Task.Delay(200, ct).ConfigureAwait(false);
     ConsoleOutput.AppOut("demo-app: connected to 12 guilds");
@@ -180,6 +191,8 @@ static async Task FakeSniffingAsync(CancellationToken ct)
     using var spinner = new InPlaceSpinner("sniffing for updates");
     await Task.Delay(2200, ct).ConfigureAwait(false);
     spinner.Complete("new version found: v0.4.0", Color.LightGreen);
+    // Cached UpdateInfo lights [u] up in the action bar (Enabled).
+    ConsoleOutput.SetUpdateActionState(UpdateActionState.Enabled);
     await Task.Delay(600, ct).ConfigureAwait(false);
 }
 
@@ -196,12 +209,15 @@ static async Task FakeShutdownAsync(CancellationToken ct)
     spinner.UpdateLabel("grace period (+10s)");
     await Task.Delay(1500, ct).ConfigureAwait(false);
     spinner.Complete("app sat down.", Color.LightGreen);
-    // Session ended — header reverts to the pre-attach state until the
-    // 'fresh hello' lands a few hundred ms later.
+    // Session ended — header reverts to the pre-attach state, [u] hides
+    // (no app to target) until the fresh hello lands.
     ConsoleOutput.SetAppInfo(null, null);
     ConsoleOutput.SetHealth(null);
+    ConsoleOutput.SetUpdateActionState(UpdateActionState.Hidden);
     await Task.Delay(800, ct).ConfigureAwait(false);
     ConsoleOutput.SetAppInfo("demo-app", "0.4.0");
+    // Update was applied, so the new session has no cached update yet.
+    ConsoleOutput.SetUpdateActionState(UpdateActionState.Disabled);
     ConsoleOutput.SetHealth("healthy");
     ConsoleOutput.Husky("demo-app v0.4.0 is up.");
     await Task.Delay(400, ct).ConfigureAwait(false);
@@ -234,6 +250,36 @@ static async Task FakeDownloadAsync(CancellationToken ct)
     sink.OnFinished(received, sw.Elapsed);
 }
 
+static async Task FakeCrashRestartAsync(CancellationToken ct)
+{
+    // Synthetic crash: clear the per-session header state, then drive the
+    // 'down — restarting in Ns' override once a second so the right slot
+    // turns red and counts down (LEASH §10.4).
+    ConsoleOutput.AppErr("demo-app: FATAL unhandled exception");
+    await Task.Delay(200, ct).ConfigureAwait(false);
+    ConsoleOutput.Husky("demo-app exited with code 1 — considering restart.");
+    ConsoleOutput.SetAppInfo(null, null);
+    ConsoleOutput.SetHealth(null);
+    ConsoleOutput.SetUpdateActionState(UpdateActionState.Hidden);
+    await Task.Delay(300, ct).ConfigureAwait(false);
+
+    ConsoleOutput.Husky("pausing 5s before restart.");
+    for (int s = 5; s > 0 && !ct.IsCancellationRequested; s--)
+    {
+        ConsoleOutput.SetCrashRestart($"down — restarting in {s}s");
+        await Task.Delay(1000, ct).ConfigureAwait(false);
+    }
+    ConsoleOutput.SetCrashRestart(null);
+
+    // Fresh session lands. Header repopulates and the action bar's [u]
+    // returns in its disabled (no cached update) state.
+    ConsoleOutput.SetAppInfo("demo-app", "0.4.0");
+    ConsoleOutput.SetUpdateActionState(UpdateActionState.Disabled);
+    ConsoleOutput.SetHealth("healthy");
+    ConsoleOutput.Husky("back online. demo-app v0.4.0 is up.");
+    await Task.Delay(400, ct).ConfigureAwait(false);
+}
+
 static async Task BurstAsync(CancellationToken ct)
 {
     ConsoleOutput.Husky("burst: 200 lines incoming.");
@@ -260,7 +306,7 @@ static async Task BurstAsync(CancellationToken ct)
 
 static async Task IdleAsync(CancellationToken ct)
 {
-    ConsoleOutput.Husky("idle. press Esc to exit.");
+    ConsoleOutput.Husky("idle. press [c] for copy-logs toast, [u] for update demo, Esc to exit.");
     int n = 0;
     while (!ct.IsCancellationRequested)
     {
