@@ -201,12 +201,12 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
 
     private void DrainPending()
     {
-        // §10.4 'autoscroll while pinned to tail' is now native to
-        // Retro.Crt.Tui's ScrollViewer (≥ 0.1.2): LogViewer.Append
-        // tracks the user's pin state and skips the snap-to-bottom
-        // when they've scrolled up. The only path that still needs
-        // manual handling is the in-place tail Insert below — direct
-        // Items mutation bypasses the auto-scroll hook by design.
+        // §10.4 'autoscroll while pinned to tail' is native to ScrollViewer:
+        // LogViewer.Append / UpdateLast track the user's pin state and skip
+        // the snap-to-bottom when they've scrolled up. The only path still
+        // doing direct Items mutation is the Append-above-tail Insert below
+        // — that's a deliberate bypass so progress stays at the bottom while
+        // regular lines flow in above it.
         while (pending.TryDequeue(out PendingOp op))
         {
             string formatted = FormatLine(op.When, op.Source, op.Message);
@@ -217,8 +217,8 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
                     {
                         // Insert above the in-place tail so progress stays at the
                         // bottom while regular lines flow in above it. Items.Insert
-                        // bypasses LogViewer.Append's sticky-tail follow, so we
-                        // re-pin manually when the user was at the tail.
+                        // bypasses Append's sticky-tail follow, so we re-pin
+                        // manually when the user was at the tail.
                         bool wasPinned = logViewer.IsPinnedToTail;
                         logViewer.Items.Insert(
                             logViewer.Items.Count - 1,
@@ -237,15 +237,12 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
                     break;
 
                 case OpKind.UpdateInPlace:
-                    if (tailIsInPlace && logViewer.Items.Count > 0)
-                        logViewer.Items[^1] = new LogEntry(formatted, op.SourceColor);
+                    if (tailIsInPlace) logViewer.UpdateLast(formatted, op.SourceColor);
                     break;
 
                 case OpKind.CompleteInPlace:
-                    if (tailIsInPlace && logViewer.Items.Count > 0)
-                        logViewer.Items[^1] = new LogEntry(formatted, op.SourceColor);
-                    else
-                        logViewer.Append(formatted, op.SourceColor);
+                    if (tailIsInPlace) logViewer.UpdateLast(formatted, op.SourceColor);
+                    else logViewer.Append(formatted, op.SourceColor);
                     tailIsInPlace = false;
                     break;
 
