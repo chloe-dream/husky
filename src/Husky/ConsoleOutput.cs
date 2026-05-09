@@ -69,9 +69,9 @@ internal static partial class ConsoleOutput
     public static void Husky(string message, bool force = false, Color? messageColor = null) =>
         sink.Append(DateTime.Now, "husky", Color.LightCyan, message, messageColor, force);
 
-    /// <summary>Logs a line from the hosted app's stdout in green. Always queued behind an active live widget.</summary>
+    /// <summary>Logs a line from the hosted app's stdout in white. Always queued behind an active live widget.</summary>
     public static void AppOut(string message) =>
-        sink.Append(DateTime.Now, "app", Color.LightGreen, message, messageColor: null, force: false);
+        sink.Append(DateTime.Now, "app", Color.White, message, messageColor: null, force: false);
 
     /// <summary>Logs a line from the hosted app's stderr in red. Always queued behind an active live widget.</summary>
     public static void AppErr(string message) =>

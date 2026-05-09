@@ -21,7 +21,7 @@ public sealed class ConsoleOutputSinkTests
 
             Assert.Collection(fake.Lines,
                 e => { Assert.Equal("husky", e.Source); Assert.Equal(Color.LightCyan, e.SourceColor); Assert.Equal("hello", e.Message); },
-                e => { Assert.Equal("app", e.Source);   Assert.Equal(Color.LightGreen, e.SourceColor); Assert.Equal("from app", e.Message); },
+                e => { Assert.Equal("app", e.Source);   Assert.Equal(Color.White, e.SourceColor);      Assert.Equal("from app", e.Message); },
                 e => { Assert.Equal("app", e.Source);   Assert.Equal(Color.LightRed, e.SourceColor);   Assert.Equal("error from app", e.Message); },
                 e => { Assert.Equal("pipe", e.Source);  Assert.Equal(Color.DarkGray, e.SourceColor);   Assert.Equal("pipe trace", e.Message); });
         }

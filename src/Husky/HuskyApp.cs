@@ -60,7 +60,7 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
 
         logViewer = new LogViewer
         {
-            Foreground     = Color.LightGray,
+            Foreground     = Color.White,
             Background     = Color.Black,
             ScrollbarTrack = Color.DarkGray,
             ScrollbarThumb = Color.LightCyan,
