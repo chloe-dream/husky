@@ -553,9 +553,27 @@ public sealed class HuskyClient : IAsyncDisposable
 
         string? informational = entry
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
-        if (!string.IsNullOrWhiteSpace(informational)) return informational;
+        string raw = !string.IsNullOrWhiteSpace(informational)
+            ? informational
+            : entry.GetName().Version?.ToString() ?? "0.0.0";
+        return NormalizeVersion(raw);
+    }
 
-        return entry.GetName().Version?.ToString() ?? "0.0.0";
+    /// <summary>
+    /// Drop the build-number bits — the 4th FileVersion component and SemVer
+    /// build metadata (<c>+commit</c>) — so the version sent over the pipe
+    /// is clean X.Y.Z (or X.Y.Z-prerelease). Pre-release tags survive
+    /// because they mark a release channel, not a build.
+    /// </summary>
+    private static string NormalizeVersion(string raw)
+    {
+        int plus = raw.IndexOf('+');
+        if (plus >= 0) raw = raw[..plus];
+        int dash = raw.IndexOf('-');
+        string core = dash >= 0 ? raw[..dash] : raw;
+        string suffix = dash >= 0 ? raw[dash..] : string.Empty;
+        string[] parts = core.Split('.');
+        return parts.Length >= 3 ? $"{parts[0]}.{parts[1]}.{parts[2]}{suffix}" : raw;
     }
 
     private static string GetAppNameFallback()

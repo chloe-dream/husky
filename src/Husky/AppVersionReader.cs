@@ -28,11 +28,11 @@ internal static class AppVersionReader
         if (managedAssembly is not null)
         {
             string? fromDll = FileVersionInfo.GetVersionInfo(managedAssembly).FileVersion;
-            if (!string.IsNullOrWhiteSpace(fromDll)) return fromDll;
+            if (!string.IsNullOrWhiteSpace(fromDll)) return VersionFormat.ToDisplay(fromDll);
         }
 
         string? fromExe = FileVersionInfo.GetVersionInfo(executablePath).FileVersion;
-        return string.IsNullOrWhiteSpace(fromExe) ? BootstrapVersion : fromExe;
+        return string.IsNullOrWhiteSpace(fromExe) ? BootstrapVersion : VersionFormat.ToDisplay(fromExe);
     }
 
     private static string? TryFindManagedAssembly(string executablePath)

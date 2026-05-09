@@ -52,7 +52,7 @@ internal sealed class HttpUpdateSource(
         }
 
         return new UpdateInfo(
-            Version: manifest.Version,
+            Version: VersionFormat.ToDisplay(manifest.Version),
             DownloadUrl: downloadUrl,
             Sha256: string.IsNullOrWhiteSpace(manifest.Sha256) ? null : manifest.Sha256,
             Config: config,

@@ -123,7 +123,10 @@ internal sealed class AppPipeServer : IAsyncDisposable
 
         ConnectedApp = new ConnectedApp(
             Name: hello.AppName,
-            Version: hello.AppVersion,
+            // Defensive normalize: an older Husky.Client (≤0.1.3) may send a
+            // 4-part FileVersion or '+commit' suffix. Strip to X.Y.Z so every
+            // downstream display (TUI header, "is up." log) stays clean.
+            Version: VersionFormat.ToDisplay(hello.AppVersion),
             Pid: hello.Pid,
             Capabilities: appCapabilities,
             UpdateMode: effectiveMode);

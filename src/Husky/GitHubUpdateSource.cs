@@ -86,7 +86,7 @@ internal sealed class GitHubUpdateSource(
             await FetchSourceSuppliedConfigAsync(release, ct).ConfigureAwait(false);
 
         return new UpdateInfo(
-            Version: remoteVersion,
+            Version: VersionFormat.ToDisplay(remoteVersion),
             DownloadUrl: downloadUrl,
             Sha256: null,
             Config: config,

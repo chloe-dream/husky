@@ -259,9 +259,10 @@ static string GetLauncherVersion()
 {
     Assembly asm = Assembly.GetExecutingAssembly();
     string? info = asm.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
-    return string.IsNullOrWhiteSpace(info)
+    string raw = string.IsNullOrWhiteSpace(info)
         ? asm.GetName().Version?.ToString() ?? "0.0.0"
         : info;
+    return VersionFormat.ToDisplay(raw);
 }
 
 static bool IsNoColorRequested() =>
