@@ -159,7 +159,7 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
                 // disk, dropping a confirmation back into the same
                 // buffer would be noise.
                 chrome.ShowActionBarToast(
-                    $"wrote {snapshot.Count} lines → {fileName}",
+                    $"wrote {snapshot.Count} lines -> {fileName}",
                     Color.LightGreen);
             }
             catch (Exception ex)
