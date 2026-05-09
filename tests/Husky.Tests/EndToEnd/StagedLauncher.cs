@@ -127,7 +127,7 @@ internal sealed class StagedLauncher : IAsyncDisposable
         }
 
         try { Directory.Delete(RootDirectory, recursive: true); }
-        catch (IOException) { /* swallow - Windows may still hold a handle briefly */ }
+        catch (IOException) { /* swallow — Windows may still hold a handle briefly */ }
         catch (UnauthorizedAccessException) { }
     }
 

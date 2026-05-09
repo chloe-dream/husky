@@ -22,7 +22,7 @@ internal sealed class AppProcess : IAsyncDisposable
 
         process.Exited += OnExited;
 
-        // Subscription races with process termination - re-check after subscribing.
+        // Subscription races with process termination — re-check after subscribing.
         if (process.HasExited) OnExited(this, EventArgs.Empty);
     }
 
@@ -113,7 +113,7 @@ internal sealed class AppProcess : IAsyncDisposable
         {
             await ExitTask.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         }
-        catch (TimeoutException) { /* exit task did not complete - proceed with cleanup */ }
+        catch (TimeoutException) { /* exit task did not complete — proceed with cleanup */ }
         catch (OperationCanceledException) { /* normal */ }
 
         process.Dispose();

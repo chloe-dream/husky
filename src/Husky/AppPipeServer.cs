@@ -28,7 +28,7 @@ internal sealed class AppPipeServer : IAsyncDisposable
     public ConnectedApp? ConnectedApp { get; private set; }
 
     /// <summary>
-    /// Cached snapshot of the latest known update for this session - populated
+    /// Cached snapshot of the latest known update for this session — populated
     /// by the launcher's polling loop. <c>update-check</c> replies, and
     /// <c>update-now</c> triggers, are answered against this. Null means "no
     /// known update."
@@ -36,10 +36,10 @@ internal sealed class AppPipeServer : IAsyncDisposable
     public UpdateStatusPayload? CurrentUpdateStatus { get; private set; }
 
     /// <summary>
-    /// Fires once for every message received from the hosted app - heartbeat,
-    /// pong, shutdown-ack, or unknown - *before* type-specific dispatch. The
+    /// Fires once for every message received from the hosted app — heartbeat,
+    /// pong, shutdown-ack, or unknown — *before* type-specific dispatch. The
     /// watchdog uses this to refresh its <c>lastActivity</c> timestamp per
-    /// LEASH S8.1.
+    /// LEASH §8.1.
     /// </summary>
     public Action? OnActivity { get; set; }
 
@@ -52,8 +52,8 @@ internal sealed class AppPipeServer : IAsyncDisposable
 
     /// <summary>
     /// Fires when an app-side request is downgraded because the app did not
-    /// declare a required capability - currently only the manual-updates gate
-    /// (LEASH S3.5.13). The argument is a ready-to-render warning sentence
+    /// declare a required capability — currently only the manual-updates gate
+    /// (LEASH §3.5.13). The argument is a ready-to-render warning sentence
     /// (no timestamp, no source prefix). LauncherRuntime / AppSessionLauncher
     /// route this through <c>ConsoleOutput</c> so the human running Husky
     /// notices a misbehaving or mismatched-version app.
@@ -72,7 +72,7 @@ internal sealed class AppPipeServer : IAsyncDisposable
     /// Fires when the hosted app sends <c>update-check</c>. The launcher is
     /// expected to poll the source synchronously, update
     /// <see cref="CurrentUpdateStatus"/>, and return the fresh payload to
-    /// be sent in the <c>update-status</c> reply (LEASH S3.5.9). When the
+    /// be sent in the <c>update-status</c> reply (LEASH §3.5.9). When the
     /// callback is unset or throws, the handler falls back to
     /// <see cref="CurrentUpdateStatus"/> so the RPC always resolves.
     /// </summary>
@@ -133,7 +133,7 @@ internal sealed class AppPipeServer : IAsyncDisposable
     private string ResolveInitialUpdateMode(
         IReadOnlyList<string> appCapabilities, HelloPreferences? preferences, string appName)
     {
-        // LEASH S3.5.13 capability gating: a non-default updateMode is only
+        // LEASH §3.5.13 capability gating: a non-default updateMode is only
         // honoured when the app declared the manual-updates capability.
         bool supportsManual = appCapabilities.Contains(Protocol.Capabilities.ManualUpdates);
         string requested = preferences?.UpdateMode ?? UpdateModes.Auto;
@@ -142,7 +142,7 @@ internal sealed class AppPipeServer : IAsyncDisposable
         {
             OnCapabilityWarning?.Invoke(
                 $"{appName} requested manual update mode but did not declare the " +
-                $"'{Protocol.Capabilities.ManualUpdates}' capability - falling back to auto.");
+                $"'{Protocol.Capabilities.ManualUpdates}' capability — falling back to auto.");
             return UpdateModes.Auto;
         }
 
@@ -308,7 +308,7 @@ internal sealed class AppPipeServer : IAsyncDisposable
 
                 if (envelope is null) return;
 
-                // S8.1: every received message resets the watchdog's activity
+                // §8.1: every received message resets the watchdog's activity
                 // timestamp, regardless of type.
                 OnActivity?.Invoke();
 
@@ -339,7 +339,7 @@ internal sealed class AppPipeServer : IAsyncDisposable
                         await HandleSetUpdateModeAsync(envelope, ct).ConfigureAwait(false);
                         break;
 
-                    // heartbeat / unknown types: drop per S3.6.
+                    // heartbeat / unknown types: drop per §3.6.
                 }
             }
         }
@@ -410,7 +410,7 @@ internal sealed class AppPipeServer : IAsyncDisposable
         SetUpdateModePayload? payload = request.Data?.Deserialize(HuskyJsonContext.Default.SetUpdateModePayload);
         string requested = payload?.Mode ?? UpdateModes.Auto;
 
-        // Capability gate (S3.5.13): if the app didn't declare manual-updates,
+        // Capability gate (§3.5.13): if the app didn't declare manual-updates,
         // any non-default request is silently downgraded to auto and the ack
         // echoes auto so the app sees the no-op.
         bool supportsManual = ConnectedApp?.SupportsManualUpdates == true;
@@ -422,7 +422,7 @@ internal sealed class AppPipeServer : IAsyncDisposable
         {
             OnCapabilityWarning?.Invoke(
                 $"{ConnectedApp?.Name ?? "app"} sent set-update-mode=manual without the " +
-                $"'{Protocol.Capabilities.ManualUpdates}' capability - ignored, mode stays auto.");
+                $"'{Protocol.Capabilities.ManualUpdates}' capability — ignored, mode stays auto.");
         }
 
         if (ConnectedApp is not null)
@@ -492,7 +492,7 @@ internal sealed class AppPipeServer : IAsyncDisposable
         if (receiverLoop is not null)
         {
             try { await receiverLoop.WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false); }
-            catch (TimeoutException) { /* loop did not drain - proceed */ }
+            catch (TimeoutException) { /* loop did not drain — proceed */ }
             catch (OperationCanceledException) { /* normal */ }
         }
 

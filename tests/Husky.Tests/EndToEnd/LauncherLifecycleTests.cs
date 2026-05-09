@@ -44,7 +44,7 @@ public sealed class LauncherLifecycleTests
     public async Task Launcher_exits_with_code_2_when_bootstrap_source_is_unreachable()
     {
         await using StagedLauncher staged = StagedLauncher.Create();
-        // No app present + no reachable manifest -> bootstrap fails -> exit 2.
+        // No app present + no reachable manifest → bootstrap fails → exit 2.
         File.Delete(staged.AppExecutablePath);
         staged.WriteConfig($$"""
             {

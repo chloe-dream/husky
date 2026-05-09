@@ -2,16 +2,16 @@ using System.Globalization;
 using Husky;
 using Retro.Crt;
 
-// Husky TUI demo - exercises the LEASH S10.4 layout without a real
+// Husky TUI demo — exercises the LEASH §10.4 layout without a real
 // LauncherRuntime, so we can iterate visually without a config / source /
 // hosted app. Constructs HuskyApp directly via InternalsVisibleTo, swaps
 // ConsoleOutput's sink, and drives a scripted fixture loop on a background
 // task.
 //
 // Pre-TUI (line mode, before the alt-screen takeover):
-//   0. ascii banner with ice-blue -> cyan gradient + a brief 'sniffing for
+//   0. ascii banner with ice-blue → cyan gradient + a brief 'sniffing for
 //      updates' spinner that disposes silently before the alt-screen kicks
-//      in - matches how prod's Program.cs warms up before HuskyApp.Run.
+//      in — matches how prod's Program.cs warms up before HuskyApp.Run.
 //
 // The fixtures cover, in order:
 //   1. boot sequence (5 quick husky lines, header populates, [u] greys
@@ -20,16 +20,16 @@ using Retro.Crt;
 //   3. watchdog pong updates with status words.
 //   4. mixed status palette (up / down / healthy / degraded).
 //   5. force-true growl escalation (the dog barks audibly).
-//   6. animated InPlaceSpinner cycle ('sniffing for updates' -> result),
+//   6. animated InPlaceSpinner cycle ('sniffing for updates' → result),
 //      flips [u] from greyed to accent on cached UpdateInfo.
 //   7. extra-long line to verify LogViewer clipping (no wrapping).
 //   8. fake download driving the real ProgressBarDownloadSink so the
-//      in-place line (LEASH S10.6) animates against the live LogViewer
+//      in-place line (LEASH §10.6) animates against the live LogViewer
 //      and the 100 % frame lands via the throttle-bypassing UpdateNow.
 //   9. animated InPlaceSpinner with intermediate UpdateLabel
-//      (graceful-shutdown style: 'asking app to sit' -> 'no ack' -> 'sat down').
-//  10. fake crash + 5-second restart-pause countdown - header's right
-//      slot reads 'down - restarting in Ns' in red while [u] hides.
+//      (graceful-shutdown style: 'asking app to sit' → 'no ack' → 'sat down').
+//  10. fake crash + 5-second restart-pause countdown — header's right
+//      slot reads 'down — restarting in Ns' in red while [u] hides.
 //  11. 200-line burst to verify the ConcurrentQueue drain keeps up.
 //
 // After the burst the demo idles. Press [c] for the copy-logs toast,
@@ -52,7 +52,7 @@ app = new HuskyApp(
         // The demo has no real update flow; just surface the click so the
         // hotkey/button is visibly responsive.
         ConsoleOutput.Husky(
-            "[u] update now - demo has no real update path.",
+            "[u] update now — demo has no real update path.",
             messageColor: Color.Yellow);
     },
     onExitRequested: () =>
@@ -64,7 +64,7 @@ app = new HuskyApp(
         app.Dismiss();
     });
 
-// Match the production pre-TUI sequence (LEASH S10.3): banner + a brief
+// Match the production pre-TUI sequence (LEASH §10.3): banner + a brief
 // 'sniffing for updates' line-mode spinner before the alt-screen takeover.
 // The default CrtConsoleSink renders these into the real terminal; Run()
 // then installs the alt-screen and restores this view on exit.
@@ -72,7 +72,7 @@ Husky.Banner.Render("0.3.2-demo");
 using (var bootSpinner = new InPlaceSpinner("sniffing for updates"))
 {
     await Task.Delay(1200).ConfigureAwait(false);
-    // Silent dispose - the in-TUI BootSequenceAsync owns the result line,
+    // Silent dispose — the in-TUI BootSequenceAsync owns the result line,
     // matching how LauncherRuntime announces 'up to date.' / 'new version
     // found' inside the alt-screen.
 }
@@ -83,7 +83,7 @@ Task fixtureTask = Task.Run(() => RunFixturesAsync(demoCts.Token));
 
 app.Run();
 
-// User pressed Esc -> demoCts already cancelled by the callback. If we got
+// User pressed Esc → demoCts already cancelled by the callback. If we got
 // here some other way (Application.Exit from somewhere, future hotkey),
 // make sure the fixture loop unwinds.
 try { demoCts.Cancel(); } catch (ObjectDisposedException) { }
@@ -148,13 +148,13 @@ static async Task ActivityLoopAsync(CancellationToken ct)
         switch (tick)
         {
             case 1:
-                ConsoleOutput.AppOut("demo-app: tick - queue=12 guilds=42");
+                ConsoleOutput.AppOut("demo-app: tick — queue=12 guilds=42");
                 break;
             case 2:
                 ConsoleOutput.Husky("pong: status=healthy queue=12 guilds=42");
                 break;
             case 3:
-                ConsoleOutput.AppOut("demo-app: tick - queue=8 guilds=42");
+                ConsoleOutput.AppOut("demo-app: tick — queue=8 guilds=42");
                 break;
             case 4:
                 ConsoleOutput.AppErr("demo-app: WARN connection reset, retrying");
@@ -164,22 +164,22 @@ static async Task ActivityLoopAsync(CancellationToken ct)
                 ConsoleOutput.Husky("pong: status=degraded queue=205 guilds=42");
                 break;
             case 6:
-                // S3.5.13 capability-warning style yellow line.
+                // §3.5.13 capability-warning style yellow line.
                 ConsoleOutput.Husky(
-                    "demo-app sent set-update-mode=manual without 'manual-updates' - ignored.",
+                    "demo-app sent set-update-mode=manual without 'manual-updates' — ignored.",
                     messageColor: Color.Yellow);
                 break;
             case 7:
-                // Growl escalation - force:true triggers the bell in line
+                // Growl escalation — force:true triggers the bell in line
                 // mode; in TUI it just appears at the tail like everything
                 // else but Crt.Bell still fires (audible).
                 ConsoleOutput.SetHealth("unhealthy");
                 ConsoleOutput.Husky(
-                    "growling - no pong in 30s. probing.",
+                    "growling — no pong in 30s. probing.",
                     force: true);
                 break;
             case 8:
-                ConsoleOutput.AppOut("demo-app: tick - queue=4 guilds=42");
+                ConsoleOutput.AppOut("demo-app: tick — queue=4 guilds=42");
                 break;
             case 9:
                 ConsoleOutput.SetHealth("healthy");
@@ -188,19 +188,19 @@ static async Task ActivityLoopAsync(CancellationToken ct)
             case 10:
                 // Manual-mode update notification, before the FakeSniffing
                 // and FakeDownload fixtures take over the lower viewport.
-                ConsoleOutput.Husky("manual mode - notifying app, waiting for trigger.");
+                ConsoleOutput.Husky("manual mode — notifying app, waiting for trigger.");
                 break;
             default:
                 ConsoleOutput.AppOut(
-                    $"demo-app: tick - queue={Math.Max(0, 12 - tick)} guilds=42");
+                    $"demo-app: tick — queue={Math.Max(0, 12 - tick)} guilds=42");
                 break;
         }
     }
 
-    // Long-line clipping fixture (LEASH S10.4: no wrapping; LogViewer clips
-    // with a "..." marker at the right edge).
+    // Long-line clipping fixture (LEASH §10.4: no wrapping; LogViewer clips
+    // with a "…" marker at the right edge).
     ConsoleOutput.AppOut(
-        "demo-app: VERY-LONG-LINE - " +
+        "demo-app: VERY-LONG-LINE — " +
         new string('-', 220) +
         " end.");
 }
@@ -217,18 +217,18 @@ static async Task FakeSniffingAsync(CancellationToken ct)
 
 static async Task FakeShutdownAsync(CancellationToken ct)
 {
-    ConsoleOutput.Husky("update complete - bouncing demo-app.");
+    ConsoleOutput.Husky("update complete — bouncing demo-app.");
     await Task.Delay(300, ct).ConfigureAwait(false);
 
     using var spinner = new InPlaceSpinner("asking app to sit");
     await Task.Delay(1500, ct).ConfigureAwait(false);
     // Intermediate label change keeps the animation ticking.
-    spinner.UpdateLabel("no shutdown-ack - waiting anyway");
+    spinner.UpdateLabel("no shutdown-ack — waiting anyway");
     await Task.Delay(1500, ct).ConfigureAwait(false);
     spinner.UpdateLabel("grace period (+10s)");
     await Task.Delay(1500, ct).ConfigureAwait(false);
     spinner.Complete("app sat down.", Color.LightGreen);
-    // Session ended - header reverts to the pre-attach state, [u] hides
+    // Session ended — header reverts to the pre-attach state, [u] hides
     // (no app to target) until the fresh hello lands.
     ConsoleOutput.SetAppInfo(null, null);
     ConsoleOutput.SetHealth(null);
@@ -244,7 +244,7 @@ static async Task FakeShutdownAsync(CancellationToken ct)
 
 static async Task FakeDownloadAsync(CancellationToken ct)
 {
-    ConsoleOutput.Husky("user triggered update - applying v0.4.0.");
+    ConsoleOutput.Husky("user triggered update — applying v0.4.0.");
     await Task.Delay(400, ct).ConfigureAwait(false);
 
     using var sink = new ProgressBarDownloadSink();
@@ -272,11 +272,11 @@ static async Task FakeDownloadAsync(CancellationToken ct)
 static async Task FakeCrashRestartAsync(CancellationToken ct)
 {
     // Synthetic crash: clear the per-session header state, then drive the
-    // 'down - restarting in Ns' override once a second so the right slot
-    // turns red and counts down (LEASH S10.4).
+    // 'down — restarting in Ns' override once a second so the right slot
+    // turns red and counts down (LEASH §10.4).
     ConsoleOutput.AppErr("demo-app: FATAL unhandled exception");
     await Task.Delay(200, ct).ConfigureAwait(false);
-    ConsoleOutput.Husky("demo-app exited with code 1 - considering restart.");
+    ConsoleOutput.Husky("demo-app exited with code 1 — considering restart.");
     ConsoleOutput.SetAppInfo(null, null);
     ConsoleOutput.SetHealth(null);
     ConsoleOutput.SetUpdateActionState(UpdateActionState.Hidden);
@@ -285,7 +285,7 @@ static async Task FakeCrashRestartAsync(CancellationToken ct)
     ConsoleOutput.Husky("pausing 5s before restart.");
     for (int s = 5; s > 0 && !ct.IsCancellationRequested; s--)
     {
-        ConsoleOutput.SetCrashRestart($"down - restarting in {s}s");
+        ConsoleOutput.SetCrashRestart($"down — restarting in {s}s");
         await Task.Delay(1000, ct).ConfigureAwait(false);
     }
     ConsoleOutput.SetCrashRestart(null);
@@ -319,7 +319,7 @@ static async Task BurstAsync(CancellationToken ct)
     }
 
     ConsoleOutput.Husky(
-        $"burst complete - drained 200 lines.",
+        $"burst complete — drained 200 lines.",
         messageColor: Color.LightGreen);
 }
 

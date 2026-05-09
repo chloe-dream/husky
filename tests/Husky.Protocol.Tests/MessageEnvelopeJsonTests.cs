@@ -75,7 +75,7 @@ public sealed class MessageEnvelopeJsonTests
     public void Welcome_with_rejection_keeps_reason_in_the_wire_shape()
     {
         // The rejection path is how the launcher refuses an app on protocol
-        // version mismatch (LEASH S3.6). Pin the wire shape so a future
+        // version mismatch (LEASH §3.6). Pin the wire shape so a future
         // refactor cannot silently drop the reason field.
         WelcomePayload payload = new(
             ProtocolVersion: 1,
@@ -161,8 +161,8 @@ public sealed class MessageEnvelopeJsonTests
     [Fact]
     public void Unknown_message_type_still_parses_into_envelope()
     {
-        // Per LEASH S3.6: additive fields and unknown message types must not break
-        // older readers - they get an envelope with a type they do not recognize
+        // Per LEASH §3.6: additive fields and unknown message types must not break
+        // older readers — they get an envelope with a type they do not recognize
         // and the consumer decides what to do.
         const string json = """{"type":"future-message","data":{"foo":42}}""";
 
@@ -199,7 +199,7 @@ public sealed class MessageEnvelopeJsonTests
     [Fact]
     public void Hello_with_capabilities_and_preferences_matches_spec_wire_shape()
     {
-        // LEASH S3.5.1 - the canonical hello carrying capability tokens and
+        // LEASH §3.5.1 — the canonical hello carrying capability tokens and
         // an updateMode preference. Pin the exact wire shape so a refactor
         // cannot silently rearrange or drop fields.
         HelloPayload payload = new(
@@ -323,7 +323,7 @@ public sealed class MessageEnvelopeJsonTests
     [Fact]
     public void UpdateCheck_envelope_carries_id_and_type_only()
     {
-        // Mirrors ping (S3.5.4). No payload - purely a request marker.
+        // Mirrors ping (§3.5.4). No payload — purely a request marker.
         MessageEnvelope envelope = new()
         {
             Id = "55555555-5555-5555-5555-555555555555",
@@ -340,7 +340,7 @@ public sealed class MessageEnvelopeJsonTests
     [Fact]
     public void UpdateNow_envelope_has_only_a_type_field()
     {
-        // Fire-and-forget trigger (S3.5.12). No id, no data.
+        // Fire-and-forget trigger (§3.5.12). No id, no data.
         MessageEnvelope envelope = new() { Type = MessageTypes.UpdateNow };
 
         string json = JsonSerializer.Serialize(envelope, HuskyJsonContext.Default.MessageEnvelope);

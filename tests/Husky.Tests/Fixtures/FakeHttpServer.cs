@@ -43,7 +43,7 @@ internal sealed class FakeHttpServer : IAsyncDisposable
         return Bind(rootDirectory);
     }
 
-    /// <summary>Starts a server with no file root - only mapped routes respond.</summary>
+    /// <summary>Starts a server with no file root — only mapped routes respond.</summary>
     public static FakeHttpServer StartEmpty() => Bind(rootDirectory: null);
 
     private static FakeHttpServer Bind(string? rootDirectory)

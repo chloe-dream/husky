@@ -4,19 +4,33 @@ namespace Husky;
 
 internal static class Banner
 {
-    // Pure-ASCII figlet-style logo: charm without UTF-8 mojibake when
-    // the cast lands in a clipboard, terminal, or text editor that
-    // doesn't speak the same encoding as the launcher's stdout. The
-    // Crt.Banner.Gradient call still applies the cool ice-blue ->
-    // bright cyan vertical gradient, so it lights up just fine on a
-    // truecolor terminal even though the glyphs themselves are ASCII.
     private static readonly string[] Logo =
     [
-        @"   _   _ _   _ ____  _  ____   __",
-        @"  | | | | | | / ___|| |/ /\ \ / /",
-        @"  | |_| | | | \___ \| ' /  \ V / ",
-        @"  |  _  | |_| |___) | . \   | |  ",
-        @"  |_| |_|\___/|____/|_|\_\  |_|  ",
+        "                                      ▆▇▂                   ▁▇▇",
+        "                                    ▆▇██▇▇▂               ▂▇▇██▇▇▁",
+        "                                    ██▃▂▇█▇▇▃           ▂▇▇██▂▂██▁",
+        "                                 ▁▆▆▃▂▁ ▂▂▇█▄           ▂█▇▂▂  ▂▂▆▆▂",
+        "                                  ██▁     ▆█▄ ▄▆▆▆▆▆▆▆▅ ▂█▇      ██▂",
+        "                                  ██▁   ▁ ▂▃▅▆█████████▆▅▃▂      ██▂",
+        "                                  ██▁   ▁ ▄▆▇████████████▆▅      ██▂",
+        "                                  ██▁   ▅▆█████████████████▆▆    ██▂",
+        "                                  ██▁ ▅▅████████▆▃▃▃▅████████▅▅  ██▂",
+        "                                  ██▅▅██████████▄   ▃██████████▅▅██▂",
+        "                                  ██████████▅▄▆█▄   ▃█▇▄▄██████████▂",
+        "                                  ████████▅▄▂ ▃▄▂   ▂▄▃ ▁▄▄████████▂",
+        "                                ▄▄██████▅▄▁               ▁▄▄██████▅▅▁",
+        "                                ██████▅▅▄▄▁ ▃▄▂       ▁▄▃ ▁▄▄▅▅██████▂",
+        "                                ██████▁ ▄▅▄▄▇█▆▄▂   ▁▄▅█▇▃▄▅▅  ██████▂",
+        "                                ████▆▅▁   ▄▅▅▅▅▅▃   ▂▅▅▅▅▅▅    ▅▅████▂",
+        "                               ▁▆▆██▁                            ██▆▆▂",
+        "                                  ██▁                            ██▂",
+        "                                  ██▁         ▁▂▂▂▂▂▂▂▂          ██▂",
+        "                                  ▇▇▃▃▁       ▅███████▆       ▁▂▃▆▇▂",
+        "                                    ▆▇▃▂▂▂▁   ▄▇█████▇▅   ▁▂▂▂▂▇▇▁",
+        "                                      ▆▇▇▇▄▂▁   ▄███▅   ▁▂▃▇▇▇▇",
+        "                                          ▆█▄▂▁ ▃▇▇▇▅ ▁▂▃▇▇",
+        "                                            ▅█▄▂▂▂▂▂▂▂▃█▆",
+        "                                              ▅███████▆",
     ];
 
     // Husky-fur palette: cool ice-blue at the top, brighter cyan at the

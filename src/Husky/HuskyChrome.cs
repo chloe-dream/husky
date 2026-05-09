@@ -8,7 +8,7 @@ namespace Husky;
 
 /// <summary>
 /// Root container for <see cref="HuskyApp"/>. Lays out the five rows
-/// described in LEASH S10.4: a 1-row header, a 1-row separator, the
+/// described in LEASH §10.4: a 1-row header, a 1-row separator, the
 /// fill-the-rest log viewport, a 1-row separator, and a 1-row action
 /// bar. Owns the chrome-level hotkeys (c/u/x/Esc/Ctrl+C) so users can
 /// drive the TUI from the keyboard alone.
@@ -81,7 +81,7 @@ internal sealed class HuskyChrome : Container
 
     /// <summary>
     /// Override the header's right slot with a crash-restart message
-    /// (e.g., <c>down - restarting in 3s</c>). Pass <c>null</c> to clear
+    /// (e.g., <c>down — restarting in 3s</c>). Pass <c>null</c> to clear
     /// and revert to the health slot. Safe from any thread.
     /// </summary>
     public void SetCrashRestart(string? message)
@@ -99,7 +99,7 @@ internal sealed class HuskyChrome : Container
 
     /// <summary>
     /// Replace the action bar's hotkey hints with a transient toast for
-    /// <paramref name="duration"/> (default 3s, per LEASH S10.4). Safe
+    /// <paramref name="duration"/> (default 3s, per LEASH §10.4). Safe
     /// from any thread; the bar reverts on its own when the timer fires.
     /// </summary>
     public void ShowActionBarToast(string text, Color color, TimeSpan? duration = null)
@@ -115,7 +115,7 @@ internal sealed class HuskyChrome : Container
 
     public override void OnDraw(ScreenBuffer screen)
     {
-        // Drain queued log entries before the children read LogViewer.Items -
+        // Drain queued log entries before the children read LogViewer.Items —
         // this is the only "tick" hook we get on the UI thread without
         // marshalling support in Application.
         drainPending();
@@ -129,7 +129,7 @@ internal sealed class HuskyChrome : Container
     {
         if (app.Modal is not null) return base.OnKey(key, app);
 
-        // Esc / x / Ctrl+C -> graceful exit. Two press of the latter could
+        // Esc / x / Ctrl+C → graceful exit. Two press of the latter could
         // escalate to hard kill in the future; for now any of them just
         // requests a graceful shutdown.
         if (key.Key == Key.Escape) { onExitRequested(); return true; }
@@ -143,7 +143,7 @@ internal sealed class HuskyChrome : Container
                 onExitRequested();
                 return true;
             }
-            // Plain letters trigger the corresponding action - no Ctrl/Alt.
+            // Plain letters trigger the corresponding action — no Ctrl/Alt.
             if ((key.Modifiers & ~KeyModifiers.Shift) == KeyModifiers.None)
             {
                 switch (g)
@@ -160,7 +160,7 @@ internal sealed class HuskyChrome : Container
 
     /// <summary>
     /// 1-row banner at the top: launcher branding left-aligned, app
-    /// name+version centered (or '(starting...)' before the handshake),
+    /// name+version centered (or '(starting…)' before the handshake),
     /// health status right-aligned in its semantic colour. State setters
     /// are thread-safe via a tiny lock; the UI thread snapshots under the
     /// same lock during <see cref="OnDraw"/>.
@@ -171,9 +171,9 @@ internal sealed class HuskyChrome : Container
         private string? appName;
         private string? appVersion;
         private string? health;
-        // Set during a crash-restart pause (LEASH S10.4). When non-null
+        // Set during a crash-restart pause (LEASH §10.4). When non-null
         // it takes priority over `health` for the right slot and renders
-        // in red - the launcher tickles it once a second with the
+        // in red — the launcher tickles it once a second with the
         // remaining countdown text.
         private string? crashRestart;
 
@@ -209,7 +209,7 @@ internal sealed class HuskyChrome : Container
                 localCrashRestart = crashRestart;
             }
 
-            // Black across the whole chrome - the LogViewer is also black,
+            // Black across the whole chrome — the LogViewer is also black,
             // and the two horizontal separators above/below the log do the
             // visual delimiting that the bars used to do via DarkGray fill.
             // Status-word semantic colours (LightGreen / Yellow / LightRed)
@@ -224,8 +224,8 @@ internal sealed class HuskyChrome : Container
                 Color.LightCyan, Color.Black, CellAttrs.Bold);
 
             // Right: crash-restart override wins over live health. The
-            // right slot stays empty pre-handshake; '(starting...)' lives
-            // in the center per S10.4 so the bar is symmetrical even
+            // right slot stays empty pre-handshake; '(starting…)' lives
+            // in the center per §10.4 so the bar is symmetrical even
             // before the first hello.
             (string text, Color color) right = ResolveRightSlot(localHealth, localCrashRestart);
             int rightLen = Math.Min(right.text.Length, b.Width - leftLen);
@@ -237,12 +237,12 @@ internal sealed class HuskyChrome : Container
             }
 
             // Middle: app name + version, centered between the left and right
-            // slots. Pre-handshake (S10.4) the centre reads '(starting...)'
+            // slots. Pre-handshake (§10.4) the centre reads '(starting…)'
             // until the first hello populates name/version. The slot drops
-            // entirely when it can't fit the full text - a truncated
+            // entirely when it can't fit the full text — a truncated
             // app-name is worse than no name.
             string mid = localName is null
-                ? "(starting...)"
+                ? "(starting…)"
                 : (localVer is null ? localName : $"{localName} v{localVer}");
             Color midColor = localName is null ? Color.DarkGray : Color.White;
             int leftEnd = b.X + leftLen;
@@ -278,11 +278,11 @@ internal sealed class HuskyChrome : Container
 
     /// <summary>
     /// 1-row strip at the bottom showing the three commands as
-    /// dot-separated hotkey hints (<c>c copy logs | u update now | x exit</c>).
+    /// dot-separated hotkey hints (<c>c copy logs · u update now · x exit</c>).
     /// The hotkey letter is in the launcher's accent colour and bold; the
     /// label is plain on a black background; the middle-dot separator picks
     /// up the label colour. Activation goes through
-    /// <see cref="HuskyChrome.OnKey"/>'s global hotkeys - there are no
+    /// <see cref="HuskyChrome.OnKey"/>'s global hotkeys — there are no
     /// focusable button widgets here, since Tab cycling adds nothing
     /// when every command already has a single-letter shortcut.
     /// </summary>
@@ -413,9 +413,8 @@ internal sealed class HuskyChrome : Container
 
         private static int DrawDotSeparator(ScreenBuffer screen, int x, int y, int max)
         {
-            // ASCII pipe between hotkey hints. Space on each side keeps
-            // the bar readable in proportional fonts and in copies.
-            const string Sep = " | ";
+            // U+00B7 MIDDLE DOT, padded by a space on each side.
+            const string Sep = " · ";
             int len = Math.Min(Sep.Length, max - x);
             if (len > 0)
                 screen.PutString(x, y, Sep.AsSpan(0, len),
@@ -426,9 +425,8 @@ internal sealed class HuskyChrome : Container
 
     /// <summary>
     /// 1-row horizontal rule used between the header / log / action-bar
-    /// rows in place of bg-fill bands. Plain ASCII hyphen across the
-    /// full width, dim against the chrome's black background - survives
-    /// any clipboard / encoding round-trip on its way out of the TUI.
+    /// rows in place of bg-fill bands. Plain U+2500 box-drawing glyph
+    /// across the full width, dim against the chrome's black background.
     /// </summary>
     private sealed class Separator : View
     {
@@ -437,7 +435,7 @@ internal sealed class HuskyChrome : Container
             var b = Bounds;
             if (b.Width <= 0 || b.Height <= 0) return;
             screen.FillRect(b.X, b.Y, b.Width, b.Height,
-                new Cell('-', Color.DarkGray, Color.Black));
+                new Cell('─', Color.DarkGray, Color.Black));
         }
     }
 }

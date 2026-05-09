@@ -86,7 +86,7 @@ public sealed class DependencyInjectionTests
         FakeApplicationLifetime lifetime = new();
         await using HuskyHostedService service = new(lifetime, provider);
 
-        // Start the hosted service - it will AttachIfHostedAsync against our pipe.
+        // Start the hosted service — it will AttachIfHostedAsync against our pipe.
         Task startTask = service.StartAsync(CancellationToken.None);
         await connectTask;
 
@@ -126,7 +126,7 @@ public sealed class DependencyInjectionTests
                 PongPayload? pong = envelope.Data?.Deserialize(HuskyJsonContext.Default.PongPayload);
                 if (pong is null) throw new InvalidOperationException("pong with no payload");
                 if (pong.Status == expectedStatus) return pong.Status;
-                break; // got pong but not the expected status yet - wait and ping again
+                break; // got pong but not the expected status yet — wait and ping again
             }
 
             await Task.Delay(TimeSpan.FromMilliseconds(500), cts.Token);

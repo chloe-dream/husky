@@ -96,7 +96,7 @@ public sealed class MessageReaderTests
         reader.Dispose();
 
         // If the stream was disposed, accessing CanRead would still be true on
-        // a disposed MemoryStream - instead we verify Position is settable.
+        // a disposed MemoryStream — instead we verify Position is settable.
         stream.Position = 0;
     }
 

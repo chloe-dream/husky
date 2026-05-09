@@ -27,7 +27,7 @@ public sealed class WatchdogTests
         watchdog.Start();
 
         // Advance time in slices smaller than IdleWindow, recording activity
-        // before each slice - the loop must never see idle > IdleWindow.
+        // before each slice — the loop must never see idle > IdleWindow.
         for (int i = 0; i < 10; i++)
         {
             watchdog.RecordActivity();

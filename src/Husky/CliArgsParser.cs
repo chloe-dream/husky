@@ -1,7 +1,7 @@
 namespace Husky;
 
 /// <summary>
-/// Parses the launcher's command-line flags per LEASH S5.2.1. Recognises
+/// Parses the launcher's command-line flags per LEASH §5.2.1. Recognises
 /// <c>--dir</c>, <c>--manifest</c>, <c>--repo</c> and <c>--asset</c>; any
 /// other token, a missing value, a duplicate flag or a conflicting
 /// combination throws <see cref="HuskyConfigException"/> so Program.cs can

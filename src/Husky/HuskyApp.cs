@@ -6,7 +6,7 @@ using Retro.Crt.Tui.Widgets;
 namespace Husky;
 
 /// <summary>
-/// The TUI-mode host (LEASH S10.4). Owns a <see cref="Application"/>, a
+/// The TUI-mode host (LEASH §10.4). Owns a <see cref="Application"/>, a
 /// <see cref="LogViewer"/>, and a <see cref="HuskyChrome"/> that lays out
 /// header / log / action-bar. Implements <see cref="ConsoleOutput.IConsoleSink"/>
 /// so every <c>ConsoleOutput.Husky</c>/<c>AppOut</c>/<c>AppErr</c>/<c>Pipe</c>
@@ -36,14 +36,14 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
     // lives on `inPlaceClaimed` below and runs from background threads.
     private bool tailIsInPlace;
 
-    // S10.7: the in-memory log buffer is capped so a chatty app can't
+    // §10.7: the in-memory log buffer is capped so a chatty app can't
     // grow memory unbounded over a long-running session. Oldest entries
     // drop first; the user can still snapshot the buffer via [c] before
     // the cap kicks in.
     private const int MaxLogItems = 5_000;
 
     // 0 = no in-place line, 1 = one is open. Flipped via Interlocked so a
-    // second concurrent BeginInPlaceLine throws cleanly per LEASH S10.6.
+    // second concurrent BeginInPlaceLine throws cleanly per LEASH §10.6.
     private int inPlaceClaimed;
 
     private readonly LogViewer logViewer;
@@ -83,7 +83,7 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
             onExitRequested: onExitRequested);
 
         application = new Application(chrome);
-        // S10.4: 'Default focus: log viewport, pinned to tail.' Without
+        // §10.4: 'Default focus: log viewport, pinned to tail.' Without
         // this the first focusable widget wins, which depending on the
         // chrome's layout could be something else after future widgets
         // land. Be explicit.
@@ -99,8 +99,8 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
 
     /// <summary>
     /// Signal the input/render loop to leave <see cref="Run"/>. Safe to call
-    /// from any thread - <c>Application.Exit</c> stores a boolean that the
-    /// loop checks each tick (<=16 ms latency).
+    /// from any thread — <c>Application.Exit</c> stores a boolean that the
+    /// loop checks each tick (≤16 ms latency).
     /// </summary>
     public void Dismiss() => application.Exit();
 
@@ -110,7 +110,7 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
     {
         // Force/messageColor are line-mode concepts (queue bypass + per-segment
         // colours). In TUI mode the LogViewer takes one colour per line and
-        // there is no widget to bypass - both inputs are intentionally ignored.
+        // there is no widget to bypass — both inputs are intentionally ignored.
         _ = force;
         _ = messageColor;
         pending.Enqueue(PendingOp.Append(when, source, sourceColor, message));
@@ -133,7 +133,7 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
     /// directory. Called from the [c] button / hotkey on the UI thread, so
     /// the snapshot is consistent; the actual file IO runs on a background
     /// task to keep the render loop responsive. The result lands as a
-    /// husky log line - green on success, yellow on failure - so the user
+    /// husky log line — green on success, yellow on failure — so the user
     /// sees confirmation in the same buffer they just exported.
     /// </summary>
     public void CopyLogsToFile()
@@ -145,8 +145,8 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
             snapshot.Add(entry.Text ?? string.Empty);
 
         string fileName = $"husky-logs-{DateTime.UtcNow:yyyy-MM-ddTHH-mm-ss}Z.txt";
-        // S10.4: copy-logs lands in the resolved working directory, not
-        // the process's CWD - `--dir` may have pointed Husky elsewhere.
+        // §10.4: copy-logs lands in the resolved working directory, not
+        // the process's CWD — `--dir` may have pointed Husky elsewhere.
         string path = Path.Combine(workingDirectory, fileName);
 
         Task.Run(() =>
@@ -154,12 +154,12 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
             try
             {
                 File.WriteAllLines(path, snapshot);
-                // S10.4: feedback lands as a 3s status-bar replacement,
-                // not a log line - the user just dumped the buffer to
+                // §10.4: feedback lands as a 3s status-bar replacement,
+                // not a log line — the user just dumped the buffer to
                 // disk, dropping a confirmation back into the same
                 // buffer would be noise.
                 chrome.ShowActionBarToast(
-                    $"wrote {snapshot.Count} lines -> {fileName}",
+                    $"wrote {snapshot.Count} lines → {fileName}",
                     Color.LightGreen);
             }
             catch (Exception ex)
@@ -175,7 +175,7 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
     {
         // No cursor-sharing in TUI mode. Caller's Spinner.Show/ProgressBar.Start
         // calls would otherwise paint escape sequences directly into the
-        // alt-screen and shred our rendering - redirect Crt's underlying
+        // alt-screen and shred our rendering — redirect Crt's underlying
         // sink to /dev/null for the scope's lifetime so those frames vanish.
         // The caller's normal ConsoleOutput.Husky log lines bypass Crt and
         // reach this sink's Append regardless.
@@ -188,9 +188,9 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
     {
         if (Interlocked.CompareExchange(ref inPlaceClaimed, 1, 0) != 0)
             throw new InvalidOperationException(
-                "ConsoleOutput already has an active in-place line - only one at a time.");
+                "ConsoleOutput already has an active in-place line — only one at a time.");
 
-        // The timestamp on an in-place line freezes at start: S10.6 says
+        // The timestamp on an in-place line freezes at start: §10.6 says
         // 'one operation = one frozen start-timestamp during updates'.
         DateTime when = DateTime.Now;
         pending.Enqueue(PendingOp.OpenInPlace(when, source, sourceColor, initialMessage));
@@ -201,11 +201,11 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
 
     private void DrainPending()
     {
-        // S10.4 'autoscroll while pinned to tail' is now native to
-        // Retro.Crt.Tui's ScrollViewer (>= 0.1.2): LogViewer.Append
+        // §10.4 'autoscroll while pinned to tail' is now native to
+        // Retro.Crt.Tui's ScrollViewer (≥ 0.1.2): LogViewer.Append
         // tracks the user's pin state and skips the snap-to-bottom
         // when they've scrolled up. The only path that still needs
-        // manual handling is the in-place tail Insert below - direct
+        // manual handling is the in-place tail Insert below — direct
         // Items mutation bypasses the auto-scroll hook by design.
         while (pending.TryDequeue(out PendingOp op))
         {
@@ -264,7 +264,7 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
 
     private static string FormatLine(DateTime when, string source, string message)
     {
-        // LEASH S10.4: TUI lines carry the same prefix as line mode but in
+        // LEASH §10.4: TUI lines carry the same prefix as line mode but in
         // a single source colour. Pad source to match the line-mode width
         // for visual alignment when the user copies the buffer to a file.
         string timestamp = when.ToString("HH:mm:ss");
@@ -337,7 +337,7 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
         public void UpdateNow(string message)
         {
             if (completed || disposed) return;
-            // S10.6: 0% / 100% frame guarantee - bypass the throttle so the
+            // §10.6: 0% / 100% frame guarantee — bypass the throttle so the
             // final progress frame always lands before the Complete summary
             // replaces it.
             lastUpdateTick = Environment.TickCount64;
@@ -348,7 +348,7 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
         {
             if (completed) return;
             completed = true;
-            // S10.6: the completion line gets a fresh timestamp so the user
+            // §10.6: the completion line gets a fresh timestamp so the user
             // can read 'started at X, finished at Y' from the buffer.
             owner.EnqueueComplete(
                 DateTime.Now, source, finalMessageColor ?? sourceColor, finalMessage);
@@ -359,7 +359,7 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
             if (disposed) return;
             disposed = true;
             // If the caller never called Complete, release the gate without
-            // changing the tail entry - the last update frame stays visible
+            // changing the tail entry — the last update frame stays visible
             // as a dangling progress/spinner step. Subsequent Appends flow
             // below it as normal lines.
             if (!completed)

@@ -6,10 +6,10 @@ namespace Husky;
 /// <summary>
 /// <see cref="IDownloadProgress"/> implementation that folds a download
 /// into a single self-updating <c>husky</c>-tagged log line via
-/// <see cref="ConsoleOutput.BeginInPlaceHusky"/> (LEASH S10.6). The
+/// <see cref="ConsoleOutput.BeginInPlaceHusky"/> (LEASH §10.6). The
 /// active sink picks the rendering: TUI mode rewrites the LogViewer's
 /// tail entry on every <see cref="OnAdvanced"/>; line mode degrades to
-/// a start line and a final summary line (LEASH S10.3) - no cursor
+/// a start line and a final summary line (LEASH §10.3) — no cursor
 /// magic, pipe-friendly. Long-lived: one instance per launcher process,
 /// each download reuses the sink. Disposing the sink itself releases
 /// any half-started in-place line (the safety net for downloads that
@@ -44,7 +44,7 @@ internal sealed class ProgressBarDownloadSink : IDownloadProgress, IDisposable
     {
         if (line is null) return;
 
-        // S10.6: guarantee the 100% frame even if the throttle would have
+        // §10.6: guarantee the 100% frame even if the throttle would have
         // dropped the last OnAdvanced. The summary then immediately
         // replaces it on the next render tick.
         line.UpdateNow(BuildBarMessage(bytesReceived, totalKnown));
@@ -58,7 +58,7 @@ internal sealed class ProgressBarDownloadSink : IDownloadProgress, IDisposable
 
     /// <summary>
     /// Releases any active in-place line. Safe to call multiple times and
-    /// at any point in the sink's lifecycle - the safety net for downloads
+    /// at any point in the sink's lifecycle — the safety net for downloads
     /// that throw between <see cref="OnStarted"/> and <see cref="OnFinished"/>.
     /// </summary>
     public void Dispose() => ResetUnsafe();
@@ -75,7 +75,7 @@ internal sealed class ProgressBarDownloadSink : IDownloadProgress, IDisposable
         {
             // Unknown total: show received bytes only with an indeterminate
             // marker. Still useful to confirm the stream is moving.
-            return $"fetching ... {HumanBytes.Format(received)}";
+            return $"fetching … {HumanBytes.Format(received)}";
         }
 
         double fraction = Math.Clamp((double)received / total, 0.0, 1.0);
@@ -83,11 +83,8 @@ internal sealed class ProgressBarDownloadSink : IDownloadProgress, IDisposable
         int emptyCells = BarWidth - filledCells;
         int percent = (int)Math.Round(fraction * 100.0);
 
-        // ASCII bar: '#' for filled, '.' for empty. Renders identically
-        // in the TUI, in line-mode redirected output, and in any
-        // clipboard / log file the user might paste this somewhere else.
         return
-            $"fetching {new string('#', filledCells)}{new string('.', emptyCells)} {percent,3}%  " +
+            $"fetching {new string('█', filledCells)}{new string('░', emptyCells)} {percent,3}%  " +
             $"{HumanBytes.Format(received)} / {HumanBytes.Format(total)}";
     }
 

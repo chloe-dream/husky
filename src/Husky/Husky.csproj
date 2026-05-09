@@ -19,7 +19,7 @@
   </PropertyGroup>
 
   <!-- The launcher ships as a single self-contained file with the runtime
-       baked in (LEASH S13.1). These settings only apply during `dotnet
+       baked in (LEASH §13.1). These settings only apply during `dotnet
        publish`, so a plain `dotnet build` keeps producing the framework-
        dependent layout the E2E tests rely on. -->
   <PropertyGroup Condition="'$(_IsPublishing)' == 'true' or '$(IsPublishing)' == 'true'">

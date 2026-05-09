@@ -11,10 +11,10 @@ Console.OutputEncoding = Encoding.UTF8;
 string launcherVersion = GetLauncherVersion();
 // Banner renders before any TUI takeover so the husky logo bookends the
 // session: visible at startup in both modes, and brought back when the
-// alt-screen restores on exit (LEASH S10.3).
+// alt-screen restores on exit (LEASH §10.3).
 Husky.Banner.Render(launcherVersion);
 
-// Step 1 - parse CLI flags (LEASH S5.2.1). Resolves --dir and the
+// Step 1 — parse CLI flags (LEASH §5.2.1). Resolves --dir and the
 // synthetic source block before we touch any file.
 CliArgs cliArgs;
 try
@@ -40,7 +40,7 @@ catch (HuskyConfigException ex)
 
 string configPath = Path.Combine(workingDirectory, HuskyConfigLoader.DefaultFileName);
 
-// Step 2 - load the local config when present; tolerate its absence
+// Step 2 — load the local config when present; tolerate its absence
 // when CLI source flags supply everything we need to bootstrap.
 LocalHuskyConfig? localConfig;
 try
@@ -53,7 +53,7 @@ catch (HuskyConfigException ex)
     return ExitCodes.ConfigError;
 }
 
-// Step 3 - merge CLI source over local source (LEASH S5.2 layer 1 > 2).
+// Step 3 — merge CLI source over local source (LEASH §5.2 layer 1 > 2).
 SourceConfig? mergedSource = cliArgs.CliSource ?? localConfig?.Source;
 if (mergedSource is null)
 {
@@ -65,13 +65,13 @@ if (mergedSource is null)
 }
 
 if (cliArgs.CliSource is not null && localConfig?.Source is not null)
-    ConsoleOutput.Husky("CLI source overrides local config (LEASH S5.2).");
+    ConsoleOutput.Husky("CLI source overrides local config (LEASH §5.2).");
 
 LocalHuskyConfig effectiveLocal = (localConfig ?? new LocalHuskyConfig()) with { Source = mergedSource };
 
 using HttpClient httpClient = BuildHttpClient(launcherVersion);
 
-// Step 4 - initialise the source provider.
+// Step 4 — initialise the source provider.
 IUpdateSource source;
 try
 {
@@ -113,7 +113,7 @@ using PosixSignalRegistration sigtermReg = PosixSignalRegistration.Create(
         OnInterrupt();
     });
 
-// Step 5 - initial source poll. Currentversion "0.0.0" makes the providers
+// Step 5 — initial source poll. Currentversion "0.0.0" makes the providers
 // always return the latest available release (so we get the source-supplied
 // config block whether or not we'd update). A network failure here is OK if
 // the local config can stand on its own.
@@ -144,9 +144,9 @@ if (bootPollError is not null)
     ConsoleOutput.Husky($"initial source poll failed: {bootPollError.Message}");
 if (bootPoll?.SourceFieldDropped == true)
     ConsoleOutput.Husky(
-        "source-supplied config contained a 'source' block - dropped (anti-redirect, LEASH S9.2).");
+        "source-supplied config contained a 'source' block — dropped (anti-redirect, LEASH §9.2).");
 
-// Step 6 - resolve the effective config (CLI source + local + source-supplied + defaults).
+// Step 6 — resolve the effective config (CLI source + local + source-supplied + defaults).
 HuskyConfig config;
 try
 {
@@ -189,10 +189,10 @@ LauncherRuntime runtime = new(
     executablePath: executablePath,
     seedUpdateInfo: bootPoll);
 
-// Step 7 - pick the rendering mode. TUI mode (LEASH S10.4) requires a
+// Step 7 — pick the rendering mode. TUI mode (LEASH §10.4) requires a
 // real interactive terminal; piping or redirection forces line mode
-// (LEASH S10.3) so `husky | grep` and `husky > log.txt` keep working.
-// `NO_COLOR` (https://no-color.org/) also forces line mode - the user
+// (LEASH §10.3) so `husky | grep` and `husky > log.txt` keep working.
+// `NO_COLOR` (https://no-color.org/) also forces line mode — the user
 // has asked to disable styling, and a fullscreen alt-screen UI is the
 // opposite of that. Construction failures (very old console host, no
 // ANSI, raw-mode blocked) fall back to line mode without complaining.
@@ -231,7 +231,7 @@ try
             finally
             {
                 // Always dismiss the TUI when the runtime exits, no matter
-                // how - natural shutdown, exception, or user-triggered Esc.
+                // how — natural shutdown, exception, or user-triggered Esc.
                 tuiApp.Dismiss();
             }
         });

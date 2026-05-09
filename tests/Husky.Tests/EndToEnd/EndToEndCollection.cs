@@ -6,7 +6,7 @@ namespace Husky.Tests.EndToEnd;
 /// running several of them in parallel with the rest of the suite chews
 /// up enough CPU and disk that the launcher's 60-second boot-poll-plus-
 /// extract-plus-start budget can blow under contention. Within this
-/// collection xUnit runs the tests serially (one at a time) - they still
+/// collection xUnit runs the tests serially (one at a time) — they still
 /// run in parallel with tests from *other* collections.
 /// </summary>
 [CollectionDefinition(Name)]

@@ -8,9 +8,9 @@ namespace Husky;
 /// <c>config:</c> field, or the contents of a <c>husky.config.json</c>
 /// pulled from a GitHub release asset / repo root file). Every field is
 /// optional. The <c>source</c> field is parsed as a raw <see cref="JsonElement"/>
-/// purely so the launcher can detect - and warn about - an app author who
+/// purely so the launcher can detect — and warn about — an app author who
 /// accidentally tried to redirect users via source-supplied config (LEASH
-/// S9.2 / S9.3 anti-redirect rule).
+/// §9.2 / §9.3 anti-redirect rule).
 /// </summary>
 internal sealed record SourceSuppliedConfigDto(
     [property: JsonPropertyName("name")] string? Name = null,

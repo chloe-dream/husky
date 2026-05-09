@@ -6,7 +6,7 @@ internal static class UpdateInstaller
     /// Recursively copies <paramref name="sourceDirectory"/> on top of
     /// <paramref name="targetDirectory"/>. Existing files are overwritten,
     /// existing files that the update does not touch stay untouched, missing
-    /// directories are created - and nothing is ever deleted (LEASH S7.3
+    /// directories are created — and nothing is ever deleted (LEASH §7.3
     /// step 2).
     /// </summary>
     public static void Install(string sourceDirectory, string targetDirectory)

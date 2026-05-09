@@ -46,7 +46,7 @@ public sealed class HealthStatusTests
         HealthStatus b = new(HealthState.Degraded, new Dictionary<string, object> { ["x"] = 1 });
 
         // Records compare by reference for dictionary fields, so these are NOT equal.
-        // This test pins that contract - change With() carefully if you want value
+        // This test pins that contract — change With() carefully if you want value
         // equality on Details (would require a custom comparer).
         Assert.NotEqual(a, b);
     }

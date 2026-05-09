@@ -50,7 +50,7 @@ public sealed class HuskyClient : IAsyncDisposable
     /// <summary>
     /// Raised when the launcher pushes an unsolicited <c>update-available</c>
     /// notification (manual mode only). The handler is invoked from the
-    /// receiver loop - keep it short or marshal to your UI thread.
+    /// receiver loop — keep it short or marshal to your UI thread.
     /// </summary>
     public event EventHandler<HuskyUpdateInfo>? UpdateAvailable;
 
@@ -148,8 +148,8 @@ public sealed class HuskyClient : IAsyncDisposable
     /// Asks the launcher to perform a fresh source poll right now and
     /// returns the result. The launcher fetches the manifest / queries
     /// GitHub synchronously, refreshes its cached state, and replies with
-    /// the freshly observed status - bypassing the polling cadence (LEASH
-    /// S3.5.9). Returns <c>null</c> when no update is available; otherwise
+    /// the freshly observed status — bypassing the polling cadence (LEASH
+    /// §3.5.9). Returns <c>null</c> when no update is available; otherwise
     /// the <see cref="HuskyUpdateInfo"/> describing the candidate version.
     /// If the launcher's source poll fails (network error, source
     /// unreachable), it falls back to its last cached status so this call
@@ -241,7 +241,7 @@ public sealed class HuskyClient : IAsyncDisposable
                 }
                 catch when (!ct.IsCancellationRequested)
                 {
-                    // Pipe died - receiver loop will surface this via ReadAsync.
+                    // Pipe died — receiver loop will surface this via ReadAsync.
                 }
             }
         }
@@ -270,7 +270,7 @@ public sealed class HuskyClient : IAsyncDisposable
                     return;
                 }
 
-                // Reply correlation runs first - any envelope carrying a replyTo
+                // Reply correlation runs first — any envelope carrying a replyTo
                 // matches a pending request regardless of message type.
                 if (envelope.ReplyTo is { Length: > 0 } replyTo
                     && pendingReplies.TryRemove(replyTo, out TaskCompletionSource<MessageEnvelope>? tcs))
@@ -291,7 +291,7 @@ public sealed class HuskyClient : IAsyncDisposable
                         HandleUpdateAvailable(envelope);
                         break;
                     default:
-                        // Additive-fields rule S3.6 - unknown message types are dropped.
+                        // Additive-fields rule §3.6 — unknown message types are dropped.
                         break;
                 }
             }
@@ -307,7 +307,7 @@ public sealed class HuskyClient : IAsyncDisposable
         int timeoutSeconds = payload?.TimeoutSeconds ?? 60;
         ShutdownReason reason = ParseShutdownReason(payload?.Reason);
 
-        // 1. shutdown-ack - best-effort.
+        // 1. shutdown-ack — best-effort.
         MessageEnvelope ack = new() { ReplyTo = envelope.Id, Type = MessageTypes.ShutdownAck };
         try
         {
@@ -384,7 +384,7 @@ public sealed class HuskyClient : IAsyncDisposable
         }
         catch
         {
-            // Handler exceptions are not propagated - the launcher will hard-kill if needed.
+            // Handler exceptions are not propagated — the launcher will hard-kill if needed.
         }
     }
 
@@ -586,7 +586,7 @@ public sealed class HuskyClient : IAsyncDisposable
         {
             await pendingLoops.WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
         }
-        catch (TimeoutException) { /* loops won't drain - proceed with cleanup */ }
+        catch (TimeoutException) { /* loops won't drain — proceed with cleanup */ }
         catch (OperationCanceledException) { /* normal */ }
 
         reader.Dispose();

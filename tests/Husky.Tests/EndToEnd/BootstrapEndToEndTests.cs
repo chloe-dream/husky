@@ -62,8 +62,8 @@ public sealed class BootstrapEndToEndTests
         using TempDirectory releases = TempDirectory.Create("husky-empty-releases");
         await using FakeHttpServer server = FakeHttpServer.Start(releases.Path);
 
-        // Manifest version 0.0.0 == the bootstrap version -> CheckForUpdate
-        // returns null -> bootstrap throws "no version available".
+        // Manifest version 0.0.0 == the bootstrap version → CheckForUpdate
+        // returns null → bootstrap throws "no version available".
         server.MapJson("/manifest.json", """
             { "version": "0.0.0", "url": "http://localhost/whatever.zip" }
             """);

@@ -117,9 +117,9 @@ public sealed class HttpUpdateSourceTests
     [Fact]
     public async Task CheckForUpdateAsync_populates_source_supplied_config_from_manifest()
     {
-        // LEASH S9.3 - manifest's optional `config:` block carries deployment
+        // LEASH §9.3 — manifest's optional `config:` block carries deployment
         // metadata (name, executable, timing knobs) that the launcher merges
-        // with local config per S5.2.
+        // with local config per §5.2.
         await using FakeHttpServer server = FakeHttpServer.StartEmpty();
         server.MapJson("/manifest.json", """
             {

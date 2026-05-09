@@ -3,7 +3,7 @@ using Retro.Crt;
 namespace Husky;
 
 /// <summary>
-/// Drives the LEASH S5.5 graceful-shutdown sequence: send shutdown,
+/// Drives the LEASH §5.5 graceful-shutdown sequence: send shutdown,
 /// wait for ack, wait for exit within the configured timeout, fall back
 /// to <see cref="AppProcess.Kill"/> if the app does not honour the request.
 /// </summary>
@@ -25,7 +25,7 @@ internal static class GracefulShutdown
 
         if (hardKill.IsCancellationRequested)
         {
-            await HardKillAsync(session, "double interrupt - taking it down.").ConfigureAwait(false);
+            await HardKillAsync(session, "double interrupt — taking it down.").ConfigureAwait(false);
             return;
         }
 
@@ -39,15 +39,15 @@ internal static class GracefulShutdown
             }
             catch (TimeoutException)
             {
-                spinner.UpdateLabel("no shutdown-ack - waiting anyway");
+                spinner.UpdateLabel("no shutdown-ack — waiting anyway");
             }
             catch (IOException)
             {
-                spinner.UpdateLabel("pipe is gone - waiting for exit");
+                spinner.UpdateLabel("pipe is gone — waiting for exit");
             }
             catch (OperationCanceledException) when (hardKill.IsCancellationRequested)
             {
-                spinner.Complete("double interrupt - taking it down.", Color.LightRed);
+                spinner.Complete("double interrupt — taking it down.", Color.LightRed);
                 await KillAndDrainAsync(session).ConfigureAwait(false);
                 return;
             }
@@ -59,7 +59,7 @@ internal static class GracefulShutdown
             }
             if (hardKill.IsCancellationRequested)
             {
-                spinner.Complete("double interrupt - taking it down.", Color.LightRed);
+                spinner.Complete("double interrupt — taking it down.", Color.LightRed);
                 await KillAndDrainAsync(session).ConfigureAwait(false);
                 return;
             }
@@ -74,7 +74,7 @@ internal static class GracefulShutdown
                 }
                 if (hardKill.IsCancellationRequested)
                 {
-                    spinner.Complete("double interrupt - taking it down.", Color.LightRed);
+                    spinner.Complete("double interrupt — taking it down.", Color.LightRed);
                     await KillAndDrainAsync(session).ConfigureAwait(false);
                     return;
                 }

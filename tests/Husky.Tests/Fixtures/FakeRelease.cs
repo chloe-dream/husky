@@ -18,7 +18,7 @@ internal static class FakeRelease
 
     /// <summary>
     /// Same shape as <see cref="Valid"/> but missing the executable. Used to
-    /// exercise the extractor's sanity check (LEASH S7.2 step 5).
+    /// exercise the extractor's sanity check (LEASH §7.2 step 5).
     /// </summary>
     public static FakeReleaseBuilder MissingExecutable() =>
         new FakeReleaseBuilder()
@@ -26,7 +26,7 @@ internal static class FakeRelease
             .WithFile("app/data/some.txt", "still no exe");
 
     /// <summary>
-    /// Executable is at the wrong path - root rather than under <c>app/</c>.
+    /// Executable is at the wrong path — root rather than under <c>app/</c>.
     /// </summary>
     public static FakeReleaseBuilder WrongStructure() =>
         new FakeReleaseBuilder()

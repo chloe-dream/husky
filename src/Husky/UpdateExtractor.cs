@@ -8,7 +8,7 @@ internal static class UpdateExtractor
     /// <summary>
     /// Extracts <paramref name="zipPath"/> into <paramref name="targetDirectory"/>
     /// (which is wiped first), then verifies the package contains the expected
-    /// executable. Implements LEASH S7.2 steps 4-5.
+    /// executable. Implements LEASH §7.2 steps 4-5.
     /// </summary>
     public static void Extract(
         string zipPath,
@@ -28,7 +28,7 @@ internal static class UpdateExtractor
 
         // ZipFile.ExtractToDirectory is synchronous with no progress hook. The
         // in-place spinner gives the user a "still working" cue and stays in
-        // the LEASH S10.5 voice on its way out.
+        // the LEASH §10.5 voice on its way out.
         using (var spinner = new InPlaceSpinner("extracting"))
         {
             try

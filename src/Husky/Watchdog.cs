@@ -68,7 +68,7 @@ internal sealed class Watchdog : IAsyncDisposable
                 catch (OperationCanceledException) { return; }
                 catch
                 {
-                    // Pipe write failed - treat as a missed probe.
+                    // Pipe write failed — treat as a missed probe.
                     acked = false;
                 }
 

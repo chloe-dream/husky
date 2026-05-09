@@ -71,7 +71,7 @@ internal sealed class HuskyHostedService(
         if (healthPollTask is not null)
         {
             try { await healthPollTask.WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false); }
-            catch (TimeoutException) { /* poll loop did not drain - proceed */ }
+            catch (TimeoutException) { /* poll loop did not drain — proceed */ }
             catch (OperationCanceledException) { /* normal */ }
         }
 

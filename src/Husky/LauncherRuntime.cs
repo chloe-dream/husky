@@ -25,7 +25,7 @@ internal sealed class LauncherRuntime(
     private UpdateInfo? cachedUpdate;
     private CancellationToken pollingToken;
     // Tracks which version we've already pushed an unsolicited update-available
-    // for in manual mode. LEASH S3.5.11: "once per discovered version" - so
+    // for in manual mode. LEASH §3.5.11: "once per discovered version" — so
     // the polling loop must not re-push the same version on every tick.
     // Cleared when an update applies, when a new session starts, or when the
     // discovered version changes.
@@ -33,7 +33,7 @@ internal sealed class LauncherRuntime(
 
     public async Task<int> RunAsync(CancellationToken graceful, CancellationToken hardKill)
     {
-        // Boot-time update check (LEASH S5.3). The seed comes from a pre-poll
+        // Boot-time update check (LEASH §5.3). The seed comes from a pre-poll
         // performed during config resolution (Program.cs); using it here saves
         // a second HTTP round-trip and lets us decide bootstrap-vs-update
         // against the actual installed version.
@@ -42,7 +42,7 @@ internal sealed class LauncherRuntime(
 
         if (!installed)
         {
-            ConsoleOutput.Husky("no app installed yet - bootstrapping.");
+            ConsoleOutput.Husky("no app installed yet — bootstrapping.");
             if (seedUpdateInfo is null)
             {
                 ConsoleOutput.Husky("bootstrap failed: source had no version available.");
@@ -58,7 +58,7 @@ internal sealed class LauncherRuntime(
                 ConsoleOutput.Husky($"bootstrap failed: {ex.Message}");
                 return ExitCodes.ConfigError;
             }
-            ConsoleOutput.Husky($"update succeeded - now on v{installedVersion}");
+            ConsoleOutput.Husky($"update succeeded — now on v{installedVersion}");
             currentVersion = AppVersionReader.ReadCurrent(executablePath);
         }
         else
@@ -70,7 +70,7 @@ internal sealed class LauncherRuntime(
                 try
                 {
                     await ApplyUpdateAtBootAsync(bootCheck, graceful).ConfigureAwait(false);
-                    ConsoleOutput.Husky($"update succeeded - now on v{bootCheck.Version}");
+                    ConsoleOutput.Husky($"update succeeded — now on v{bootCheck.Version}");
                     currentVersion = AppVersionReader.ReadCurrent(executablePath);
                 }
                 catch (OperationCanceledException) when (graceful.IsCancellationRequested)
@@ -80,12 +80,12 @@ internal sealed class LauncherRuntime(
                 catch (Exception ex)
                 {
                     ConsoleOutput.Husky($"update aborted: {ex.Message}");
-                    // Continue with the existing install - polling will retry.
+                    // Continue with the existing install — polling will retry.
                 }
             }
             else if (seedUpdateInfo is null)
             {
-                ConsoleOutput.Husky("source unreachable - running with last installed version.");
+                ConsoleOutput.Husky("source unreachable — running with last installed version.");
             }
             else
             {
@@ -108,7 +108,7 @@ internal sealed class LauncherRuntime(
 
         AnnounceUp(session);
 
-        // Polling loop (LEASH S5.3.7).
+        // Polling loop (LEASH §5.3.7).
         pollingToken = graceful;
         await using UpdateScheduler scheduler = new(
             interval: TimeSpan.FromMinutes(config.CheckMinutes),
@@ -145,12 +145,12 @@ internal sealed class LauncherRuntime(
             {
                 // If a polling-tick update is mid-flight, let it finish (or
                 // tear it down via the hard-kill token on a double Ctrl+C)
-                // before we drive our own shutdown - otherwise we'd race
+                // before we drive our own shutdown — otherwise we'd race
                 // StopCurrentSessionAsync with a duplicate stop.
                 Task<bool>? pending = PeekUpdateInFlight();
                 if (pending is not null)
                 {
-                    ConsoleOutput.Husky("update in flight - letting it finish before we sit.");
+                    ConsoleOutput.Husky("update in flight — letting it finish before we sit.");
                     try { await pending.WaitAsync(hardKill).ConfigureAwait(false); }
                     catch (OperationCanceledException) when (hardKill.IsCancellationRequested) { /* fall through */ }
                 }
@@ -176,7 +176,7 @@ internal sealed class LauncherRuntime(
             }
 
             // Session ended. If an update is driving this exit, hand control
-            // back to the polling tick - it owns the next session.
+            // back to the polling tick — it owns the next session.
             Task<bool>? updateAwait = TakeUpdateInFlight();
             if (updateAwait is not null)
             {
@@ -186,7 +186,7 @@ internal sealed class LauncherRuntime(
 
                 if (updateOk && CurrentSession is not null) continue;
 
-                // Update aborted with no fresh session - fall through to the
+                // Update aborted with no fresh session — fall through to the
                 // crash path so the restart policy applies.
             }
 
@@ -199,7 +199,7 @@ internal sealed class LauncherRuntime(
                 return ExitCodes.Ok;
             }
 
-            ConsoleOutput.Husky($"{config.Name} exited with code {exitCode} - considering restart.");
+            ConsoleOutput.Husky($"{config.Name} exited with code {exitCode} — considering restart.");
 
             if (!restartPolicy.CanRestart())
             {
@@ -207,19 +207,19 @@ internal sealed class LauncherRuntime(
                 bool revived = await ParkUntilUpdateOrInterruptAsync(graceful).ConfigureAwait(false);
                 if (!revived) return ExitCodes.Ok;
 
-                ConsoleOutput.Husky("update brought a fresh build - back online.");
+                ConsoleOutput.Husky("update brought a fresh build — back online.");
                 continue;
             }
 
             ConsoleOutput.Husky($"pausing {config.RestartPauseSec}s before restart.");
             try
             {
-                // S10.4: while we're between crash and restart, the
-                // header's right slot reads 'down - restarting in Ns'
+                // §10.4: while we're between crash and restart, the
+                // header's right slot reads 'down — restarting in Ns'
                 // in red. Tickle once a second so the countdown is live.
                 for (int s = config.RestartPauseSec; s > 0; s--)
                 {
-                    ConsoleOutput.SetCrashRestart($"down - restarting in {s}s");
+                    ConsoleOutput.SetCrashRestart($"down — restarting in {s}s");
                     await Task.Delay(TimeSpan.FromSeconds(1), graceful).ConfigureAwait(false);
                 }
             }
@@ -249,7 +249,7 @@ internal sealed class LauncherRuntime(
 
     /// <summary>
     /// Wait for either a graceful interrupt or a successful update that brings
-    /// up a fresh session (LEASH S8.4: a successful update resets the cap and
+    /// up a fresh session (LEASH §8.4: a successful update resets the cap and
     /// triggers a start). Returns true when a session is now available.
     /// </summary>
     private async Task<bool> ParkUntilUpdateOrInterruptAsync(CancellationToken graceful)
@@ -301,21 +301,21 @@ internal sealed class LauncherRuntime(
         }
 
         // Refresh the per-session cache regardless of whether a new version
-        // was found - apps in manual mode may call update-check at any time.
+        // was found — apps in manual mode may call update-check at any time.
         cachedUpdate = update;
         UpdateAppSessionCache(session, version, update);
         RefreshUpdateActionState();
 
         if (update is null) return;
 
-        // Manual mode: notify the app and wait for update-now (LEASH S3.5.11).
+        // Manual mode: notify the app and wait for update-now (LEASH §3.5.11).
         if (IsSessionInManualMode(session))
         {
-            // S3.5.11 says "once per discovered version" - skip the push if
+            // §3.5.11 says "once per discovered version" — skip the push if
             // we've already announced this exact version on this session.
             if (lastPushedManualVersion == update.Version) return;
 
-            ConsoleOutput.Husky("manual mode - notifying app, waiting for trigger.");
+            ConsoleOutput.Husky("manual mode — notifying app, waiting for trigger.");
             try
             {
                 await session!.PipeServer.PushUpdateAvailableAsync(
@@ -351,7 +351,7 @@ internal sealed class LauncherRuntime(
             cachedUpdate = null;
             lastPushedManualVersion = null;
             RefreshUpdateActionState();
-            ConsoleOutput.Husky($"update succeeded - now on v{update.Version}");
+            ConsoleOutput.Husky($"update succeeded — now on v{update.Version}");
             mark.TrySetResult(true);
         }
         catch (UpdateException ex)
@@ -396,7 +396,7 @@ internal sealed class LauncherRuntime(
     /// synchronously, refreshing both the per-runtime cached
     /// <see cref="UpdateInfo"/> and the per-session
     /// <see cref="UpdateStatusPayload"/>, and returning the fresh payload
-    /// for <see cref="AppPipeServer"/> to send as the reply (LEASH S3.5.9).
+    /// for <see cref="AppPipeServer"/> to send as the reply (LEASH §3.5.9).
     /// On poll failure the exception bubbles so the pipe handler can fall
     /// back to the last cached status; the launcher logs the failure on its
     /// own console.
@@ -417,7 +417,7 @@ internal sealed class LauncherRuntime(
         catch (Exception ex)
         {
             ConsoleOutput.Husky(
-                $"app asked for an update check - source unreachable: {ex.Message}",
+                $"app asked for an update check — source unreachable: {ex.Message}",
                 messageColor: Color.Yellow);
             throw;
         }
@@ -428,8 +428,8 @@ internal sealed class LauncherRuntime(
 
         ConsoleOutput.Husky(
             update is null
-                ? "app asked for an update check - up to date."
-                : $"app asked for an update check - new version found: v{update.Version}",
+                ? "app asked for an update check — up to date."
+                : $"app asked for an update check — new version found: v{update.Version}",
             messageColor: Color.LightGreen);
 
         return update is null
@@ -449,13 +449,13 @@ internal sealed class LauncherRuntime(
             ConsoleOutput.Husky("update-now received but no update is cached.");
             return;
         }
-        ConsoleOutput.Husky($"user triggered update - applying v{snapshot.Version}.");
+        ConsoleOutput.Husky($"user triggered update — applying v{snapshot.Version}.");
         _ = Task.Run(() => TriggerUpdateAsync(snapshot, pollingToken));
     }
 
     /// <summary>
-    /// External request - equivalent to receiving an <c>update-now</c>
-    /// message from the hosted app (LEASH S3.5.12). Bound to the TUI's
+    /// External request — equivalent to receiving an <c>update-now</c>
+    /// message from the hosted app (LEASH §3.5.12). Bound to the TUI's
     /// <c>[u]</c> button / hotkey so the human running Husky can trigger
     /// the cached update without round-tripping through the app's pipe.
     /// Same semantics as the wire-driven path: if no update is cached,
@@ -509,9 +509,9 @@ internal sealed class LauncherRuntime(
         session.PipeServer.OnUpdateCheckRequested = RefreshUpdateStatusFromAppAsync;
         session.PipeServer.OnHealthChanged = ConsoleOutput.SetHealth;
         // Each new session re-announces its update state, so a fresh hello
-        // resets the S3.5.11 "once per version" guard.
+        // resets the §3.5.11 "once per version" guard.
         lastPushedManualVersion = null;
-        // S10.4 header: surface the new app's identity immediately; clear
+        // §10.4 header: surface the new app's identity immediately; clear
         // the health slot until the first pong arrives.
         ConsoleOutput.SetAppInfo(session.ConnectedApp.Name, session.ConnectedApp.Version);
         ConsoleOutput.SetHealth(null);
@@ -522,7 +522,7 @@ internal sealed class LauncherRuntime(
 
     /// <summary>
     /// Push the current <see cref="UpdateActionState"/> at the TUI's
-    /// action bar (LEASH S10.4): hidden when no app or no
+    /// action bar (LEASH §10.4): hidden when no app or no
     /// <c>manual-updates</c> capability, disabled when the capability is
     /// there but no <see cref="UpdateInfo"/> is cached, enabled when both
     /// align. Called whenever the session changes or
@@ -622,7 +622,7 @@ internal sealed class LauncherRuntime(
             currentSession = null;
         }
         // Header reverts to its pre-attach state so the centre reads
-        // '(starting...)' until the next session's hello lands; the
+        // '(starting…)' until the next session's hello lands; the
         // action bar's [u] hint disappears with no app to target.
         ConsoleOutput.SetAppInfo(null, null);
         ConsoleOutput.SetHealth(null);

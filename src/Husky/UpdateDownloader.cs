@@ -8,7 +8,7 @@ namespace Husky;
 /// Sink for streaming-download progress events. The downloader fires
 /// <see cref="OnStarted"/> once before the first byte arrives,
 /// <see cref="OnAdvanced"/> roughly every 256 KB, and
-/// <see cref="OnFinished"/> exactly once after the byte stream completes -
+/// <see cref="OnFinished"/> exactly once after the byte stream completes —
 /// i.e. before any post-download verification (SHA-256). A sink that
 /// throws from any callback is logged-and-swallowed: progress is
 /// decorative and must never abort a download.
@@ -28,14 +28,14 @@ internal interface IDownloadProgress
     /// <summary>
     /// Fires roughly every 256 KB while the download is in progress.
     /// </summary>
-    /// <param name="bytesReceived">Cumulative bytes read so far -
+    /// <param name="bytesReceived">Cumulative bytes read so far —
     /// monotonically non-decreasing within a single download.</param>
     void OnAdvanced(long bytesReceived);
 
     /// <summary>
     /// Fires exactly once after the stream copy completes, before SHA-256
     /// verification. Does not fire if the download is cancelled or
-    /// throws mid-stream - the sink's <c>IDisposable</c> (if any) is
+    /// throws mid-stream — the sink's <c>IDisposable</c> (if any) is
     /// the cleanup path for those cases.
     /// </summary>
     /// <param name="totalBytesReceived">Total bytes written to disk.</param>

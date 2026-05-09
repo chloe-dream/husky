@@ -45,7 +45,7 @@ public sealed class UpdateInstallerTests
         string source = Path.Combine(work.Path, "src");
         string target = Path.Combine(work.Path, "dst");
 
-        // Pre-existing user data - the update must NOT touch this.
+        // Pre-existing user data — the update must NOT touch this.
         WriteFile(target, "app/data/user.db", "user data");
         WriteFile(target, "app/data/cache/x.bin", "cache");
         WriteFile(target, "app/exe", "old exe");

@@ -5,7 +5,7 @@ namespace Husky;
 internal static class AppVersionReader
 {
     /// <summary>
-    /// Per LEASH S5.3.3: read the version from the executable's
+    /// Per LEASH §5.3.3: read the version from the executable's
     /// FileVersionInfo. If the executable is absent, return "0.0.0" so
     /// bootstrap mode treats any source version as newer.
     /// </summary>
@@ -19,7 +19,7 @@ internal static class AppVersionReader
             return BootstrapVersion;
 
         // The .NET apphost is stamped with FileVersion on Windows but NOT on
-        // Linux/macOS - so reading the apphost directly returns nothing on
+        // Linux/macOS — so reading the apphost directly returns nothing on
         // those platforms. The managed assembly (.dll) next to the apphost is
         // always stamped with AssemblyFileVersion, so prefer it when present.
         // Single-file published binaries have no sibling .dll; the apphost
