@@ -4,7 +4,7 @@ internal static class UpdateSourceFactory
 {
     /// <summary>
     /// Builds an <see cref="IUpdateSource"/> for the configured source type
-    /// (LEASH §9). The caller owns and disposes the supplied
+    /// (LEASH S9). The caller owns and disposes the supplied
     /// <see cref="HttpClient"/>.
     /// </summary>
     public static IUpdateSource Create(
@@ -21,7 +21,7 @@ internal static class UpdateSourceFactory
             SourceConfig.GitHubType => new GitHubUpdateSource(
                 httpClient,
                 config.Repo ?? throw new HuskyConfigException("source.repo is required for github."),
-                config.Asset, // optional — null means "first .zip asset"
+                config.Asset, // optional - null means "first .zip asset"
                 launcherVersion,
                 allowPreRelease: config.AllowPreRelease),
             SourceConfig.HttpType => new HttpUpdateSource(

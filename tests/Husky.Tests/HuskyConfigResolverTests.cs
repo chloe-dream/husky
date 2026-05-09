@@ -46,7 +46,7 @@ public sealed class HuskyConfigResolverTests
     public void Resolve_prefers_local_value_over_source_supplied_value()
     {
         // Local override semantics: a power user can override what the
-        // source-supplied config carries, per LEASH §5.2 precedence.
+        // source-supplied config carries, per LEASH S5.2 precedence.
         LocalHuskyConfig local = new(
             Source: GitHubSource,
             Name: "user-override",
@@ -103,7 +103,7 @@ public sealed class HuskyConfigResolverTests
     [Fact]
     public void Resolve_rejects_absolute_executable_paths()
     {
-        // LEASH §5.2: executable must be relative to launcher dir.
+        // LEASH S5.2: executable must be relative to launcher dir.
         string absolute = OperatingSystem.IsWindows()
             ? "C:\\Program Files\\App\\app.exe"
             : "/opt/app/app";

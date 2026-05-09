@@ -10,7 +10,7 @@ internal sealed class UpdateFlow(
     public void Dispose() => updateLock.Dispose();
 
     /// <summary>
-    /// Phase 1 (LEASH §7.2) followed by phase 2 (§7.3). The launcher provides
+    /// Phase 1 (LEASH S7.2) followed by phase 2 (S7.3). The launcher provides
     /// <paramref name="stopAppAsync"/> (graceful stop) and
     /// <paramref name="startAppAndAwaitHelloAsync"/> (start the new app and
     /// wait for its hello). For bootstrap mode, <paramref name="stopAppAsync"/>
@@ -34,7 +34,7 @@ internal sealed class UpdateFlow(
             string downloadDir = Path.Combine(installDirectory, "download");
             string extractedDir = Path.Combine(downloadDir, "extracted");
 
-            // Phase 1 — preparation; app keeps running.
+            // Phase 1 - preparation; app keeps running.
             ClearDirectory(downloadDir);
 
             string assetFileName = DeriveAssetFileName(update);
@@ -43,7 +43,7 @@ internal sealed class UpdateFlow(
             await downloader.DownloadAsync(update.DownloadUrl, update.Sha256, zipPath, ct).ConfigureAwait(false);
             UpdateExtractor.Extract(zipPath, extractedDir, executableRelativePath);
 
-            // Phase 2 — cutover.
+            // Phase 2 - cutover.
             await stopAppAsync(ct).ConfigureAwait(false);
             UpdateInstaller.Install(extractedDir, installDirectory);
             await startAppAndAwaitHelloAsync(ct).ConfigureAwait(false);

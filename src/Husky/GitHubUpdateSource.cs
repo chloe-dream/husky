@@ -5,7 +5,7 @@ using System.Net.Http.Json;
 namespace Husky;
 
 /// <summary>
-/// LEASH §9.2 — GitHub Releases source. Reads
+/// LEASH S9.2 - GitHub Releases source. Reads
 /// <c>/repos/{repo}/releases/latest</c>, looks for an asset matching the
 /// configured pattern (<c>{version}</c> placeholder substituted), and returns
 /// an <see cref="UpdateInfo"/> if the release is newer than the current app.
@@ -62,7 +62,7 @@ internal sealed class GitHubUpdateSource(
         if (!SemanticVersion.TryParse(remoteVersion, out SemanticVersion remote)) return null;
 
         // Even if the GitHub flag isn't set, a SemVer pre-release suffix
-        // (-beta, -rc.1) marks an unstable build — same opt-in rule.
+        // (-beta, -rc.1) marks an unstable build - same opt-in rule.
         if (remote.PreRelease.Length > 0 && !allowPreRelease) return null;
 
         if (!SemanticVersion.TryParse(currentVersion, out SemanticVersion current)) return null;
@@ -128,7 +128,7 @@ internal sealed class GitHubUpdateSource(
         }
         catch (HttpRequestException)
         {
-            // Network glitch fetching the config is not fatal — we just have no config.
+            // Network glitch fetching the config is not fatal - we just have no config.
             return (null, false);
         }
 
@@ -146,7 +146,7 @@ internal sealed class GitHubUpdateSource(
             }
             catch (System.Text.Json.JsonException)
             {
-                // Malformed husky.config.json should not block updates — just no source-supplied data.
+                // Malformed husky.config.json should not block updates - just no source-supplied data.
                 return (null, false);
             }
 
@@ -159,9 +159,9 @@ internal sealed class GitHubUpdateSource(
     }
 
     /// <summary>
-    /// Picks the release asset matching the configured pattern, or — when
-    /// no pattern is configured — the first asset whose name ends with
-    /// <c>.zip</c> (LEASH §9.2 fallback). The husky.config.json asset is
+    /// Picks the release asset matching the configured pattern, or - when
+    /// no pattern is configured - the first asset whose name ends with
+    /// <c>.zip</c> (LEASH S9.2 fallback). The husky.config.json asset is
     /// excluded from the fallback so it never gets mistaken for the app.
     /// </summary>
     private GitHubAssetDto? SelectAsset(GitHubReleaseDto release, string remoteVersion)

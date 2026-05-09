@@ -8,7 +8,7 @@ namespace Husky.Tests.Fixtures;
 /// Builds ZIP packages for update-flow tests. Entries are added with
 /// <see cref="WithFile(string, byte[])"/>; <see cref="BuildZip"/> writes the
 /// archive to disk and returns the path. The executable inside the package is
-/// a few placeholder bytes by default — tests for the extractor's sanity
+/// a few placeholder bytes by default - tests for the extractor's sanity
 /// check care about the path, not the binary's executability.
 /// </summary>
 internal sealed class FakeReleaseBuilder

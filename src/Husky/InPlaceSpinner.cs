@@ -8,13 +8,15 @@ namespace Husky;
 /// (sniff-poll, extract, graceful-shutdown wait) renders as one updating
 /// husky-tagged log line that visibly ticks while the operation runs.
 /// In line mode the timer's <see cref="ConsoleOutput.IInPlaceLine.Update"/>
-/// calls are no-ops (LEASH §10.3 auto-degrade), so only the start label
+/// calls are no-ops (LEASH S10.3 auto-degrade), so only the start label
 /// and the final-state line surface.
 /// </summary>
 internal sealed class InPlaceSpinner : IDisposable
 {
-    private static readonly char[] Frames =
-        ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+    // Classic ASCII spinner - survives clipboards and non-UTF terminals
+    // intact. The four-frame rotation feels brisk at the 10 Hz tick
+    // below; braille was prettier but unicode-only.
+    private static readonly char[] Frames = ['|', '/', '-', '\\'];
 
     private const int FrameIntervalMs = 100;
 
@@ -41,7 +43,7 @@ internal sealed class InPlaceSpinner : IDisposable
     /// <summary>
     /// Replace the label text. The next animation tick picks it up; the
     /// glyph keeps ticking. Call this for intermediate state changes
-    /// (e.g., 'no shutdown-ack — waiting anyway' during graceful shutdown).
+    /// (e.g., 'no shutdown-ack - waiting anyway' during graceful shutdown).
     /// </summary>
     public void UpdateLabel(string newLabel)
     {
@@ -51,7 +53,7 @@ internal sealed class InPlaceSpinner : IDisposable
 
     /// <summary>
     /// Stop the animation and replace the in-place line with a final-state
-    /// message. The completion line gets a fresh timestamp (LEASH §10.6).
+    /// message. The completion line gets a fresh timestamp (LEASH S10.6).
     /// </summary>
     public void Complete(string finalMessage, Color? finalColor = null)
     {
@@ -85,7 +87,7 @@ internal sealed class InPlaceSpinner : IDisposable
         if (completed) return;
         int next = Interlocked.Increment(ref frameIndex);
         char frame = Frames[next % Frames.Length];
-        // Snapshot the label reference once — string assignments are atomic
+        // Snapshot the label reference once - string assignments are atomic
         // on .NET so a torn read can't happen, but a label swap mid-format
         // would still be harmless.
         string snapshot = label;

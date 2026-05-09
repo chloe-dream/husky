@@ -201,7 +201,7 @@ public sealed class GitHubUpdateSourceTests
     [Fact]
     public async Task CheckForUpdateAsync_populates_config_from_husky_config_release_asset()
     {
-        // LEASH §9.2 — first lookup path: a release asset literally named
+        // LEASH S9.2 - first lookup path: a release asset literally named
         // husky.config.json next to the actual release ZIP.
         await using FakeHttpServer server = FakeHttpServer.StartEmpty();
         server.MapJson("/repos/x/y/releases/latest", $$"""
@@ -235,7 +235,7 @@ public sealed class GitHubUpdateSourceTests
     [Fact]
     public async Task CheckForUpdateAsync_falls_back_to_repo_root_for_husky_config()
     {
-        // LEASH §9.2 — second lookup path: raw.githubusercontent.com/<repo>/HEAD/husky.config.json
+        // LEASH S9.2 - second lookup path: raw.githubusercontent.com/<repo>/HEAD/husky.config.json
         // when no asset by that name exists.
         await using FakeHttpServer server = FakeHttpServer.StartEmpty();
         server.MapJson("/repos/x/y/releases/latest", $$"""
@@ -265,7 +265,7 @@ public sealed class GitHubUpdateSourceTests
     [Fact]
     public async Task CheckForUpdateAsync_returns_null_config_when_neither_lookup_finds_anything()
     {
-        // Both the asset path and the repo-root path return 404 → no config,
+        // Both the asset path and the repo-root path return 404 -> no config,
         // no exception, update still proceeds.
         await using FakeHttpServer server = FakeHttpServer.StartEmpty();
         server.MapJson("/repos/x/y/releases/latest", $$"""
@@ -290,7 +290,7 @@ public sealed class GitHubUpdateSourceTests
     [Fact]
     public async Task CheckForUpdateAsync_picks_first_zip_asset_when_pattern_is_omitted()
     {
-        // LEASH §9.2 — null/empty assetPattern means "first .zip on the release".
+        // LEASH S9.2 - null/empty assetPattern means "first .zip on the release".
         // husky.config.json must be excluded so it never gets mistaken for the app.
         await using FakeHttpServer server = FakeHttpServer.StartEmpty();
         server.MapJson("/repos/x/y/releases/latest", $$"""

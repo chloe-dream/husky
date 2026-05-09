@@ -24,8 +24,8 @@
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
 
     <!-- Husky.Protocol is shipped as an implementation detail of this NuGet
-         (LEASH §13.2 "or shipped as a separate package — decide at actual
-         release time" — for v1 we ship it inside Husky.Client). -->
+         (LEASH S13.2 "or shipped as a separate package - decide at actual
+         release time" - for v1 we ship it inside Husky.Client). -->
     <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);IncludeReferencedProjectsInPackage</TargetsForTfmSpecificBuildOutput>
   </PropertyGroup>
 
@@ -50,7 +50,7 @@
 
   <ItemGroup>
     <!-- PrivateAssets="all" keeps Husky.Protocol out of the .nuspec
-         dependency list — the DLL is bundled into the package via the
+         dependency list - the DLL is bundled into the package via the
          IncludeReferencedProjectsInPackage target above, so consumers
          do not need to resolve Husky.Protocol separately from NuGet. -->
     <ProjectReference Include="..\Husky.Protocol\Husky.Protocol.csproj" PrivateAssets="all" />

@@ -4,7 +4,7 @@ namespace Husky;
 /// Merges a <see cref="LocalHuskyConfig"/> (parsed from disk) with an
 /// optional <see cref="SourceSuppliedConfig"/> (pulled from the source) into
 /// the effective <see cref="HuskyConfig"/> the launcher runs against. See
-/// LEASH §5.2 for the precedence rules: local wins over source-supplied
+/// LEASH S5.2 for the precedence rules: local wins over source-supplied
 /// wins over built-in defaults.
 /// </summary>
 internal static class HuskyConfigResolver
@@ -15,24 +15,24 @@ internal static class HuskyConfigResolver
     {
         ArgumentNullException.ThrowIfNull(local);
 
-        // Source must already be resolved before this point — CLI source
-        // flags (LEASH §5.2.1) and the local file are merged in Program.cs.
+        // Source must already be resolved before this point - CLI source
+        // flags (LEASH S5.2.1) and the local file are merged in Program.cs.
         // If we ever get here without one, something upstream forgot to
         // exit with the "no source from any layer" error.
         if (local.Source is null)
             throw new HuskyConfigException(
-                "Config field 'source' is missing — supply it via the local config or '--manifest'/'--repo'.");
+                "Config field 'source' is missing - supply it via the local config or '--manifest'/'--repo'.");
 
         string? name = First(local.Name, supplied?.Name);
         string? executable = First(local.Executable, supplied?.Executable);
 
         if (string.IsNullOrWhiteSpace(name))
             throw new HuskyConfigException(
-                "Config field 'name' is missing — set it locally or in source-supplied config.");
+                "Config field 'name' is missing - set it locally or in source-supplied config.");
 
         if (string.IsNullOrWhiteSpace(executable))
             throw new HuskyConfigException(
-                "Config field 'executable' is missing — set it locally or in source-supplied config.");
+                "Config field 'executable' is missing - set it locally or in source-supplied config.");
 
         ValidateExecutablePath(executable);
 

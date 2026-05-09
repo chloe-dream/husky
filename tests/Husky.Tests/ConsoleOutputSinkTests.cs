@@ -57,15 +57,15 @@ public sealed class ConsoleOutputSinkTests
         {
             ConsoleOutput.SetSink(fake);
 
-            using ConsoleOutput.IInPlaceLine line = ConsoleOutput.BeginInPlaceHusky("fetching… 0%");
-            line.Update("fetching… 50%");
+            using ConsoleOutput.IInPlaceLine line = ConsoleOutput.BeginInPlaceHusky("fetching... 0%");
+            line.Update("fetching... 50%");
             line.Complete("fetched 6.8 MB in 4.2 s.", Color.LightGreen);
 
             RecordedInPlace entry = Assert.Single(fake.InPlaceLines);
             Assert.Equal("husky", entry.Source);
             Assert.Equal(Color.LightCyan, entry.SourceColor);
-            Assert.Equal("fetching… 0%", entry.InitialMessage);
-            Assert.Equal(["fetching… 50%"], entry.Updates);
+            Assert.Equal("fetching... 0%", entry.InitialMessage);
+            Assert.Equal(["fetching... 50%"], entry.Updates);
             Assert.Equal("fetched 6.8 MB in 4.2 s.", entry.CompletedMessage);
             Assert.Equal(Color.LightGreen, entry.CompletedColor);
         }
@@ -108,7 +108,7 @@ public sealed class ConsoleOutputSinkTests
         ConsoleOutput.SetSink(fake);
         ConsoleOutput.ResetSink();
 
-        // The default sink doesn't record into our fake — confirm by emitting
+        // The default sink doesn't record into our fake - confirm by emitting
         // and checking the fake stayed empty after the reset.
         ConsoleOutput.Husky("after reset");
         Assert.Empty(fake.Lines);

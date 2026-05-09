@@ -1,7 +1,7 @@
 namespace Husky;
 
 /// <summary>
-/// Crash-restart bookkeeping per LEASH §8.4. Tracks attempts inside a
+/// Crash-restart bookkeeping per LEASH S8.4. Tracks attempts inside a
 /// rolling one-hour window. After the cap is hit the launcher remains in
 /// the "broken" state until a successful update calls <see cref="Reset"/>.
 /// </summary>
@@ -32,7 +32,7 @@ internal sealed class RestartPolicy(
 
     /// <summary>
     /// Returns true if a restart is allowed *now* (cap not yet reached).
-    /// Does not record the attempt — call <see cref="RecordAttempt"/> after
+    /// Does not record the attempt - call <see cref="RecordAttempt"/> after
     /// the wait/restart is actually done.
     /// </summary>
     public bool CanRestart()
@@ -58,7 +58,7 @@ internal sealed class RestartPolicy(
     }
 
     /// <summary>
-    /// Clears the attempts and the broken flag — called after a successful
+    /// Clears the attempts and the broken flag - called after a successful
     /// update brings in a (presumed) fixed binary.
     /// </summary>
     public void Reset()

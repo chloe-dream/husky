@@ -3,7 +3,7 @@ using System.Text.Json;
 namespace Husky.Protocol;
 
 /// <summary>
-/// Writes JSON Lines messages to a stream. Not thread-safe — pair with a
+/// Writes JSON Lines messages to a stream. Not thread-safe - pair with a
 /// dedicated writer task per pipe.
 /// </summary>
 public sealed class MessageWriter(Stream stream, bool leaveOpen = false) : IAsyncDisposable

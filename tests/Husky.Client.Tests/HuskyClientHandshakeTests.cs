@@ -89,9 +89,9 @@ public sealed class HuskyClientHandshakeTests
     public async Task Hello_declares_manual_updates_and_shutdown_progress_capabilities()
     {
         // The library always speaks both wire features, so the hello declares
-        // both — apps that don't use manual updates simply never invoke that
+        // both - apps that don't use manual updates simply never invoke that
         // surface, and the launcher won't push update-available while in auto
-        // mode (LEASH §3.5.11).
+        // mode (LEASH S3.5.11).
         await using PipeTestHarness harness = await PipeTestHarness.CreateAsync();
 
         Task<HuskyClient> attachTask = HuskyClient.AttachOnStreamAsync(

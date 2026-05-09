@@ -4,7 +4,7 @@ namespace Husky.Tests;
 
 public sealed class CliArgsParserTests
 {
-    // Thin wrapper so individual tests can pass argv as `params` —
+    // Thin wrapper so individual tests can pass argv as `params` -
     // dodges CA1861 for short literal arrays at every call site.
     private static CliArgs Parse(params string[] argv) => CliArgsParser.Parse(argv);
 

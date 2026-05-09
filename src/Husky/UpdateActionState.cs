@@ -2,7 +2,7 @@ namespace Husky;
 
 /// <summary>
 /// TUI action-bar visibility for the <c>[u]</c> update-now command
-/// (LEASH §10.4). The launcher derives this from the connected app's
+/// (LEASH S10.4). The launcher derives this from the connected app's
 /// capabilities and the cached <see cref="UpdateInfo"/> state, then
 /// pushes it into the chrome via
 /// <see cref="ConsoleOutput.SetUpdateActionState(UpdateActionState)"/>.
@@ -12,7 +12,7 @@ internal enum UpdateActionState
     /// <summary>
     /// No app attached, or the connected app does not advertise the
     /// <c>manual-updates</c> capability. The hint is omitted from the
-    /// action bar entirely — the spec says <c>[u]</c> is hidden in
+    /// action bar entirely - the spec says <c>[u]</c> is hidden in
     /// this case because there is no app-side trigger to mirror.
     /// </summary>
     Hidden,

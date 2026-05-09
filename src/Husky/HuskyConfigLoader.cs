@@ -25,7 +25,7 @@ internal static class HuskyConfigLoader
     }
 
     /// <summary>
-    /// Returns null when the file is absent — CLI source flags (LEASH §5.2.1)
+    /// Returns null when the file is absent - CLI source flags (LEASH S5.2.1)
     /// can stand in for the local config. Throws on parse errors so a broken
     /// file is never silently ignored, even when CLI supplies a source.
     /// </summary>
@@ -54,7 +54,7 @@ internal static class HuskyConfigLoader
     private static void Validate(LocalHuskyConfig config)
     {
         // Source may be null on disk: CLI flags (--manifest/--repo) can fill
-        // it in (LEASH §5.2.1). Validate only when present.
+        // it in (LEASH S5.2.1). Validate only when present.
         if (config.Source is not null)
             ValidateSource(config.Source);
     }
@@ -69,8 +69,8 @@ internal static class HuskyConfigLoader
             case SourceConfig.GitHubType:
                 if (string.IsNullOrWhiteSpace(source.Repo))
                     throw new HuskyConfigException("Config field 'source.repo' is required for type 'github'.");
-                // source.asset is optional — if omitted, the provider picks
-                // the first .zip asset (LEASH §9.2).
+                // source.asset is optional - if omitted, the provider picks
+                // the first .zip asset (LEASH S9.2).
                 break;
 
             case SourceConfig.HttpType:

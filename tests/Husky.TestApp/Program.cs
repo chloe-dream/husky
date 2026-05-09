@@ -9,7 +9,7 @@ const string ModeManualUpdate = "manual-update";
 
 string mode = Environment.GetEnvironmentVariable(ModeEnvVar) ?? ModeNormal;
 
-// Distinct stdout + stderr markers — the launcher's stdout/stderr forwarding tests
+// Distinct stdout + stderr markers - the launcher's stdout/stderr forwarding tests
 // pin on these strings.
 Console.Out.WriteLine($"testapp: ready (mode={mode})");
 Console.Out.Flush();
@@ -26,7 +26,7 @@ if (mode == ModeWait)
 
 if (!HuskyClient.IsHosted)
 {
-    Console.Out.WriteLine("testapp: standalone — exiting cleanly.");
+    Console.Out.WriteLine("testapp: standalone - exiting cleanly.");
     return 0;
 }
 
@@ -38,7 +38,7 @@ await using HuskyClient client = await HuskyClient.AttachAsync(clientOptions);
 
 if (mode == ModeCrash)
 {
-    Console.Out.WriteLine("testapp: crash mode — exiting with code 7.");
+    Console.Out.WriteLine("testapp: crash mode - exiting with code 7.");
     Console.Out.Flush();
     await Task.Delay(TimeSpan.FromMilliseconds(50));
     return 7;
@@ -48,10 +48,10 @@ switch (mode)
 {
     case ModeSlowShutdown:
         // Register a handler that never returns within any reasonable launcher
-        // shutdown window — exercises the launcher's hard-kill path.
+        // shutdown window - exercises the launcher's hard-kill path.
         client.OnShutdown(async (_, _) =>
         {
-            Console.Out.WriteLine("testapp: slow-shutdown handler entered — sleeping.");
+            Console.Out.WriteLine("testapp: slow-shutdown handler entered - sleeping.");
             Console.Out.Flush();
             await Task.Delay(TimeSpan.FromMinutes(10), CancellationToken.None);
         });
@@ -60,11 +60,11 @@ switch (mode)
     case ModeManualUpdate:
         // Subscribe to update-available; on the first push, log a marker and
         // immediately call RequestUpdateAsync to trigger the launcher's update
-        // flow. This exercises the LEASH §3.5.11 / §3.5.12 round-trip.
+        // flow. This exercises the LEASH S3.5.11 / S3.5.12 round-trip.
         client.UpdateAvailable += (_, info) =>
         {
             Console.Out.WriteLine(
-                $"testapp: update-available received (current={info.CurrentVersion} new={info.NewVersion}) — triggering update.");
+                $"testapp: update-available received (current={info.CurrentVersion} new={info.NewVersion}) - triggering update.");
             Console.Out.Flush();
             _ = client.RequestUpdateAsync();
         };

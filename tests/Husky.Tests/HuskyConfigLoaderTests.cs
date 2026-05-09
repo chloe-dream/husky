@@ -31,7 +31,7 @@ public sealed class HuskyConfigLoaderTests
     public void Parse_returns_a_local_config_with_optional_fields_left_null()
     {
         // Defaults are no longer applied at parse time; HuskyConfigResolver
-        // handles that step (LEASH §5.2). Loader's job is JSON + source.
+        // handles that step (LEASH S5.2). Loader's job is JSON + source.
         LocalHuskyConfig config = HuskyConfigLoader.Parse(ValidGitHubJson);
 
         Assert.Equal("umbrella-bot", config.Name);
@@ -74,7 +74,7 @@ public sealed class HuskyConfigLoaderTests
     [Fact]
     public void Parse_accepts_a_minimal_local_config_with_only_source()
     {
-        // LEASH §5.2: name and executable can come from source-supplied
+        // LEASH S5.2: name and executable can come from source-supplied
         // config, so the local file may legitimately omit them.
         const string json = """
             { "source": { "type": "github", "repo": "x/y", "asset": "y-{version}.zip" } }
@@ -120,7 +120,7 @@ public sealed class HuskyConfigLoaderTests
     [Fact]
     public void Parse_returns_a_local_config_with_null_source_when_source_field_is_absent()
     {
-        // LEASH §5.2.1: a local file may omit `source` entirely when CLI
+        // LEASH S5.2.1: a local file may omit `source` entirely when CLI
         // flags supply one. The loader stays out of that decision; the
         // merge in Program.cs is responsible for surfacing "no source from
         // any layer" as a config error.
@@ -161,7 +161,7 @@ public sealed class HuskyConfigLoaderTests
     [Fact]
     public void Parse_accepts_github_source_without_an_asset_pattern()
     {
-        // LEASH §9.2: source.asset is optional — when absent the provider
+        // LEASH S9.2: source.asset is optional - when absent the provider
         // picks the first .zip asset on the release.
         const string json = """{ "source": { "type": "github", "repo": "x/y" } }""";
 

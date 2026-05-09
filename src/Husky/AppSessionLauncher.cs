@@ -5,7 +5,7 @@ namespace Husky;
 
 /// <summary>
 /// Builds a fresh <see cref="AppSession"/> for one launch of the hosted app
-/// (LEASH §5.4). Generates a per-launch pipe name, starts the process,
+/// (LEASH S5.4). Generates a per-launch pipe name, starts the process,
 /// performs the hello/welcome handshake, wires the watchdog activity sink,
 /// then hands the wired session back to the caller.
 /// </summary>
@@ -28,7 +28,7 @@ internal sealed class AppSessionLauncher(
         string pipeName = PipeNaming.Generate();
         AppPipeServer pipeServer = AppPipeServer.Create(pipeName, launcherVersion);
         // Wire the capability-warning hook before the handshake so initial
-        // hello-time downgrades (LEASH §3.5.13) reach the console.
+        // hello-time downgrades (LEASH S3.5.13) reach the console.
         pipeServer.OnCapabilityWarning = msg => ConsoleOutput.Husky(msg, messageColor: Color.Yellow);
 
         AppProcess? process = null;
@@ -44,7 +44,7 @@ internal sealed class AppSessionLauncher(
                     [HuskyEnvironment.AppNameVariable] = appName,
                 });
 
-            // The watchdog isn't built until after the handshake — but the
+            // The watchdog isn't built until after the handshake - but the
             // process needs activity callbacks now, so we bind through a
             // late-bound delegate.
             Action recordActivity = () => { };

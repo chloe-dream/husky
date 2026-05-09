@@ -53,7 +53,7 @@ public sealed class HuskyClientDisconnectTests
 
         Assert.True(
             elapsed < TimeSpan.FromSeconds(5),
-            $"DisposeAsync took {elapsed.TotalMilliseconds:F0} ms — loops did not drain.");
+            $"DisposeAsync took {elapsed.TotalMilliseconds:F0} ms - loops did not drain.");
     }
 
     private static async Task<TimeSpan> MeasureAsync(Func<Task> action)

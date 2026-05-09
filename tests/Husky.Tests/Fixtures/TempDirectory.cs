@@ -22,7 +22,7 @@ internal sealed class TempDirectory : IDisposable
     {
         try { Directory.Delete(Path, recursive: true); }
         catch (DirectoryNotFoundException) { }
-        catch (IOException) { /* swallow — Windows may briefly hold a handle */ }
+        catch (IOException) { /* swallow - Windows may briefly hold a handle */ }
         catch (UnauthorizedAccessException) { }
     }
 }

@@ -1,7 +1,7 @@
 namespace Husky;
 
 /// <summary>
-/// Periodic update poller (LEASH §5.3.7). Runs an async tick on the
+/// Periodic update poller (LEASH S5.3.7). Runs an async tick on the
 /// configured interval and serializes ticks (no concurrent invocations).
 /// Stop via <see cref="DisposeAsync"/>.
 /// </summary>
@@ -41,7 +41,7 @@ internal sealed class UpdateScheduler(
             catch (OperationCanceledException) { return; }
             catch (Exception)
             {
-                // Tick errors are swallowed at this layer — the tick callback
+                // Tick errors are swallowed at this layer - the tick callback
                 // surfaces them via console output. The scheduler keeps
                 // ticking on the configured cadence.
             }

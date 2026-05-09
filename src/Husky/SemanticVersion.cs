@@ -3,9 +3,9 @@ using System.Globalization;
 namespace Husky;
 
 /// <summary>
-/// Lightweight SemVer comparator (LEASH §9.2/§9.3 — both providers use the
+/// Lightweight SemVer comparator (LEASH S9.2/S9.3 - both providers use the
 /// same comparison rule). Accepts a leading <c>v</c> prefix on either side.
-/// Pre-release tags are treated lexicographically per SemVer §11; build
+/// Pre-release tags are treated lexicographically per SemVer S11; build
 /// metadata is stripped before comparison.
 /// </summary>
 internal readonly record struct SemanticVersion(int Major, int Minor, int Patch, string PreRelease)
@@ -74,7 +74,7 @@ internal readonly record struct SemanticVersion(int Major, int Minor, int Patch,
         cmp = Patch.CompareTo(other.Patch);
         if (cmp != 0) return cmp;
 
-        // SemVer §11: a version with a pre-release is *less than* one without.
+        // SemVer S11: a version with a pre-release is *less than* one without.
         bool leftHas = PreRelease.Length > 0;
         bool rightHas = other.PreRelease.Length > 0;
         if (leftHas && !rightHas) return -1;

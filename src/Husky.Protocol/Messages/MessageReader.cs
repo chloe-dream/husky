@@ -4,7 +4,7 @@ using System.Text.Json;
 namespace Husky.Protocol;
 
 /// <summary>
-/// Reads JSON Lines messages from a stream. Not thread-safe — pair with a
+/// Reads JSON Lines messages from a stream. Not thread-safe - pair with a
 /// dedicated reader task per pipe.
 /// </summary>
 public sealed class MessageReader : IDisposable

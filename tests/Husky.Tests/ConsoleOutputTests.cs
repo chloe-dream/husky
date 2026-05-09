@@ -45,7 +45,7 @@ public sealed class ConsoleOutputTests
     public void BuildLine_passes_through_brackets_unchanged()
     {
         // Retro.Crt has no markup language, so the bracket-escape dance Spectre
-        // required is gone — the message should reach the renderer verbatim.
+        // required is gone - the message should reach the renderer verbatim.
         var segs = ConsoleOutput.BuildLine(FixedTime, "app", Color.LightGreen, "[red]boom[/]");
 
         var combined = string.Concat(segs.Select(s => s.Text));
@@ -127,7 +127,7 @@ public sealed class ConsoleOutputTests
             Assert.Contains($"line-{Overflow}", output, StringComparison.Ordinal);
             Assert.Contains($"line-{Cap + Overflow - 1}", output, StringComparison.Ordinal);
 
-            Assert.Contains($"… {Overflow} app line(s) elided", output, StringComparison.Ordinal);
+            Assert.Contains($"... {Overflow} app line(s) elided", output, StringComparison.Ordinal);
         }
     }
 

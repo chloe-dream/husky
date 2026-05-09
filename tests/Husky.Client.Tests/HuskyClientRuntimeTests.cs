@@ -141,7 +141,7 @@ public sealed class HuskyClientRuntimeTests
                 if (envelope.Type == MessageTypes.Heartbeat) { sawLateHeartbeat = true; break; }
             }
         }
-        catch (OperationCanceledException) { /* watchdog timer fired — no late heartbeat */ }
+        catch (OperationCanceledException) { /* watchdog timer fired - no late heartbeat */ }
 
         Assert.False(sawLateHeartbeat);
     }
@@ -184,7 +184,7 @@ public sealed class HuskyClientRuntimeTests
         await h.Harness.ServerWriter.WriteAsync(
             new MessageEnvelope { Type = "future-message" });
 
-        // Then send a ping and assert it still works — proves the receiver loop survived.
+        // Then send a ping and assert it still works - proves the receiver loop survived.
         string pingId = Guid.NewGuid().ToString("D");
         await h.Harness.ServerWriter.WriteAsync(
             new MessageEnvelope { Id = pingId, Type = MessageTypes.Ping });

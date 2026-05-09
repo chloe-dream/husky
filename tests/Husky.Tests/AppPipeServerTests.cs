@@ -91,7 +91,7 @@ public sealed class AppPipeServerTests
     [Fact]
     public async Task ConnectedApp_falls_back_to_auto_when_app_lacks_manual_updates_capability()
     {
-        // LEASH §3.5.13 capability gating: a manual mode preference is ignored
+        // LEASH S3.5.13 capability gating: a manual mode preference is ignored
         // when the app did not declare manual-updates.
         await using LauncherPipeHarness h = await LauncherPipeHarness.CreateConnectedAsync();
 
@@ -211,7 +211,7 @@ public sealed class AppPipeServerTests
     [Fact]
     public async Task UpdateCheck_invokes_OnUpdateCheckRequested_and_replies_with_its_payload()
     {
-        // LEASH §3.5.9: when the runtime registers a fresh-poll callback, the
+        // LEASH S3.5.9: when the runtime registers a fresh-poll callback, the
         // handler must use its result instead of any pre-set cache, so the RPC
         // returns the truth observed *now* rather than at the last polling tick.
         await using LauncherPipeHarness h = await LauncherPipeHarness.CreateConnectedAsync();
@@ -577,7 +577,7 @@ public sealed class AppPipeServerTests
 
         await ReadAsync(h.ClientReader); // drain the launcher's ping
 
-        // Send a pong with a foreign replyTo — must be ignored by the launcher.
+        // Send a pong with a foreign replyTo - must be ignored by the launcher.
         await SendPongAsync(h.ClientWriter, replyTo: Guid.NewGuid().ToString("D"));
 
         Assert.False(await sendPing.WaitAsync(TimeSpan.FromSeconds(2)));

@@ -44,8 +44,8 @@ internal sealed class AppSession : IAsyncDisposable
         if (disposed) return;
         disposed = true;
 
-        // Watchdog first — silences any in-flight probe before the pipe goes
-        // away (LEASH §7.3 cutover discipline).
+        // Watchdog first - silences any in-flight probe before the pipe goes
+        // away (LEASH S7.3 cutover discipline).
         await watchdog.DisposeAsync().ConfigureAwait(false);
         await pipeServer.DisposeAsync().ConfigureAwait(false);
         await process.DisposeAsync().ConfigureAwait(false);

@@ -57,7 +57,7 @@ public sealed class HuskyClientUpdateProtocolTests
     [Fact]
     public async Task CheckForUpdateAsync_throws_when_launcher_lacks_capability()
     {
-        // No launcherCapabilities → SupportsManualUpdates is false.
+        // No launcherCapabilities -> SupportsManualUpdates is false.
         await using ConnectedHandshake handshake = await ConnectedHandshake.PerformAsync();
 
         await Assert.ThrowsAsync<NotSupportedException>(

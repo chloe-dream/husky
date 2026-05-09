@@ -4,7 +4,7 @@ using System.Net.Http.Json;
 namespace Husky;
 
 /// <summary>
-/// LEASH §9.3 — generic HTTP manifest source. Fetches a JSON manifest with
+/// LEASH S9.3 - generic HTTP manifest source. Fetches a JSON manifest with
 /// <c>{ version, url, sha256 }</c>, compares the version against the current
 /// app, and returns an <see cref="UpdateInfo"/> if newer.
 /// </summary>

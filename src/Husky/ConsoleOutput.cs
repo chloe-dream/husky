@@ -5,17 +5,17 @@ namespace Husky;
 
 /// <summary>
 /// The launcher's single console-output abstraction. Every user-visible line
-/// — launcher events, hosted-app stdout/stderr, pipe-debug traces — flows
-/// through one of the four facades here so the LEASH §10 line format
+/// - launcher events, hosted-app stdout/stderr, pipe-debug traces - flows
+/// through one of the four facades here so the LEASH S10 line format
 /// (timestamp + 8-char source + message with status-word highlights) and
 /// the live-widget gate are applied consistently.
 ///
 /// Rendering itself is delegated to an <see cref="IConsoleSink"/>. The
 /// default <see cref="CrtConsoleSink"/> drives the legacy line-mode
-/// (LEASH §10.3): segments rendered via <c>Crt.Write</c> with per-run
+/// (LEASH S10.3): segments rendered via <c>Crt.Write</c> with per-run
 /// colours, plus a process-global widget gate that buffers log lines
 /// behind an active <c>ProgressBar</c> or <c>Spinner</c>. In TUI mode
-/// (LEASH §10.4) <c>HuskyApp</c> swaps in a sink that pushes lines into a
+/// (LEASH S10.4) <c>HuskyApp</c> swaps in a sink that pushes lines into a
 /// <c>Retro.Crt.Tui.LogViewer</c>; live-widget creation is suppressed
 /// because the LogViewer doesn't share cursor state with anything.
 /// </summary>
@@ -27,7 +27,7 @@ internal static partial class ConsoleOutput
     private static IConsoleSink sink = new CrtConsoleSink();
 
     /// <summary>
-    /// Replace the active sink. Intended to be called once during startup —
+    /// Replace the active sink. Intended to be called once during startup -
     /// <c>HuskyApp</c> installs its TUI sink before the first log line, and
     /// the launcher tears it down only on process exit. Calling this with a
     /// fresh sink while a live widget is active is undefined behaviour
@@ -53,7 +53,7 @@ internal static partial class ConsoleOutput
     /// whole line takes the source colour.</param>
     /// <param name="force">When <c>true</c>, the line bypasses the
     /// live-widget queue and writes immediately even if a <see cref="ProgressBar"/>
-    /// or <see cref="Spinner"/> is currently holding the line — at the cost
+    /// or <see cref="Spinner"/> is currently holding the line - at the cost
     /// of briefly clobbering the widget's frame. If a widget is actually
     /// active when the escalation fires, a <see cref="Crt.Bell"/> is also
     /// emitted (pipe-safe via <c>IsInteractive</c>) so the user notices the
@@ -65,7 +65,7 @@ internal static partial class ConsoleOutput
     /// <param name="messageColor">When set, applies to every plain text
     /// run in <paramref name="message"/> in line mode. Status-word
     /// highlights still override per word in line mode. TUI mode ignores
-    /// this — the whole line takes the source colour.</param>
+    /// this - the whole line takes the source colour.</param>
     public static void Husky(string message, bool force = false, Color? messageColor = null) =>
         sink.Append(DateTime.Now, "husky", Color.LightCyan, message, messageColor, force);
 
@@ -105,7 +105,7 @@ internal static partial class ConsoleOutput
     /// Open a self-updating <c>husky</c>-tagged log line. In TUI mode the
     /// LogViewer's tail entry rewrites in place on every
     /// <see cref="IInPlaceLine.Update"/>; in line mode only the start and
-    /// completion lines render (LEASH §10.3 auto-degrade). Used by the
+    /// completion lines render (LEASH S10.3 auto-degrade). Used by the
     /// download progress sink to fold a fetch into one updating line.
     /// </summary>
     public static IInPlaceLine BeginInPlaceHusky(string initialMessage) =>
@@ -115,7 +115,7 @@ internal static partial class ConsoleOutput
     /// Update the TUI header with the currently-attached app's name and
     /// version. Pass <c>null</c> for either to clear (e.g., when the
     /// session ends or a crash-restart is pending). In line mode this is
-    /// a no-op — the line-mode banner doesn't carry per-app info.
+    /// a no-op - the line-mode banner doesn't carry per-app info.
     /// </summary>
     public static void SetAppInfo(string? appName, string? appVersion) =>
         sink.SetAppInfo(appName, appVersion);
@@ -130,17 +130,17 @@ internal static partial class ConsoleOutput
 
     /// <summary>
     /// Override the TUI header's right slot with a crash-restart status
-    /// line (LEASH §10.4: <c>down — restarting in 3s</c>). While set, this
+    /// line (LEASH S10.4: <c>down - restarting in 3s</c>). While set, this
     /// takes priority over any value from <see cref="SetHealth"/>; the
     /// launcher tickles it once a second during the restart-pause loop
     /// and clears it before bringing the app back up. Pass <c>null</c> to
     /// release the override and revert to the health slot. No-op in line
-    /// mode — the line-mode banner doesn't carry a transient status.
+    /// mode - the line-mode banner doesn't carry a transient status.
     /// </summary>
     public static void SetCrashRestart(string? message) => sink.SetCrashRestart(message);
 
     /// <summary>
-    /// Update the TUI action bar's <c>[u]</c> visibility (LEASH §10.4):
+    /// Update the TUI action bar's <c>[u]</c> visibility (LEASH S10.4):
     /// hidden when the app doesn't advertise <c>manual-updates</c>,
     /// greyed when no update is cached, accent-coloured when an update is
     /// queued. The launcher pushes this whenever the connected session,
@@ -215,7 +215,7 @@ internal static partial class ConsoleOutput
     /// and is finalised by <see cref="Complete"/> or just letting the caller's
     /// <see cref="IDisposable.Dispose"/> leave the last frame visible. Used by
     /// <see cref="ProgressBarDownloadSink"/> to fold a download into a single
-    /// husky-formatted log line that updates in place (LEASH §10.6).
+    /// husky-formatted log line that updates in place (LEASH S10.6).
     /// </summary>
     internal interface IInPlaceLine : IDisposable
     {
@@ -226,7 +226,7 @@ internal static partial class ConsoleOutput
         void Update(string message);
 
         /// <summary>Same as <see cref="Update"/> but bypasses any frame-rate
-        /// throttle. Used to satisfy LEASH §10.6's 0% / 100% frame guarantee
+        /// throttle. Used to satisfy LEASH S10.6's 0% / 100% frame guarantee
         /// when the caller knows this is the final progress frame.</summary>
         void UpdateNow(string message);
 
@@ -259,10 +259,10 @@ internal static partial class ConsoleOutput
         /// <summary>
         /// Open an in-place log line that the caller will refresh via
         /// <see cref="IInPlaceLine.Update"/>. Line-mode sinks degrade to
-        /// emitting just the start line (LEASH §10.3 auto-degrade) and
+        /// emitting just the start line (LEASH S10.3 auto-degrade) and
         /// silently drop intermediate updates; TUI sinks rewrite the
         /// LogViewer's tail entry on each update. Throws if another
-        /// in-place line is already active (LEASH §10.6).
+        /// in-place line is already active (LEASH S10.6).
         /// </summary>
         IInPlaceLine BeginInPlaceLine(
             string source, Color sourceColor, string initialMessage);
@@ -328,7 +328,7 @@ internal static partial class ConsoleOutput
             {
                 if (widgetActive)
                     throw new InvalidOperationException(
-                        "ConsoleOutput already has an active live widget — only one at a time.");
+                        "ConsoleOutput already has an active live widget - only one at a time.");
                 widgetActive = true;
             }
             return new WidgetScope(this);
@@ -340,11 +340,11 @@ internal static partial class ConsoleOutput
             {
                 if (widgetActive)
                     throw new InvalidOperationException(
-                        "ConsoleOutput already has an active live widget — only one at a time.");
+                        "ConsoleOutput already has an active live widget - only one at a time.");
                 widgetActive = true;
             }
 
-            // §10.3 auto-degrade: write only the start line. Update() drops the
+            // S10.3 auto-degrade: write only the start line. Update() drops the
             // payload silently; Complete() prints the final-state line and
             // releases the gate. This keeps `husky | grep` and CI logs free of
             // 60Hz progress-bar churn.
@@ -410,16 +410,16 @@ internal static partial class ConsoleOutput
                 if (dropped > 0)
                     WriteLineNow(
                         DateTime.Now, "husky", Color.LightCyan,
-                        $"… {dropped} app line(s) elided while widget held the line.",
+                        $"... {dropped} app line(s) elided while widget held the line.",
                         messageColor: null);
             }
         }
 
         /// <summary>
         /// Line-mode in-place line: the start line is already on screen;
-        /// updates drop silently (auto-degrade per §10.3); Complete writes
+        /// updates drop silently (auto-degrade per S10.3); Complete writes
         /// the final-state line and releases the in-place gate. Disposing
-        /// without Complete just releases the gate — the start line stays
+        /// without Complete just releases the gate - the start line stays
         /// as the only visible artefact.
         /// </summary>
         private sealed class LineModeInPlaceLine(
@@ -428,8 +428,8 @@ internal static partial class ConsoleOutput
             private bool completed;
             private bool disposed;
 
-            public void Update(string message) { _ = message; /* §10.3 auto-degrade */ }
-            public void UpdateNow(string message) { _ = message; /* §10.3 auto-degrade */ }
+            public void Update(string message) { _ = message; /* S10.3 auto-degrade */ }
+            public void UpdateNow(string message) { _ = message; /* S10.3 auto-degrade */ }
 
             public void Complete(string finalMessage, Color? finalMessageColor = null)
             {
@@ -471,7 +471,7 @@ internal static partial class ConsoleOutput
                 if (dropped > 0)
                     WriteLineNow(
                         DateTime.Now, "husky", Color.LightCyan,
-                        $"… {dropped} app line(s) elided while widget held the line.",
+                        $"... {dropped} app line(s) elided while widget held the line.",
                         messageColor: null);
             }
         }

@@ -11,7 +11,7 @@ public sealed class AppProcessTests
         AppProcessOptions options = new(
             ExecutablePath: TestAppLocator.ResolvePath(),
             WorkingDirectory: TestAppLocator.ResolveDirectory(),
-            // No HUSKY_PIPE → TestApp falls into its standalone branch and exits 0.
+            // No HUSKY_PIPE -> TestApp falls into its standalone branch and exits 0.
             Environment: new Dictionary<string, string?>());
 
         await using AppProcess app = AppProcess.Start(options);
@@ -71,7 +71,7 @@ public sealed class AppProcessTests
             options,
             onStandardOutput: stdoutLines.Enqueue);
 
-        // 'wait' mode prints the marker line then sleeps forever — wait for the marker
+        // 'wait' mode prints the marker line then sleeps forever - wait for the marker
         // to confirm the env var reached the child.
         await WaitForLineAsync(stdoutLines, "mode=wait", TimeSpan.FromSeconds(10));
     }
