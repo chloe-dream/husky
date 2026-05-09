@@ -36,12 +36,6 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
     // lives on `inPlaceClaimed` below and runs from background threads.
     private bool tailIsInPlace;
 
-    // §10.7: the in-memory log buffer is capped so a chatty app can't
-    // grow memory unbounded over a long-running session. Oldest entries
-    // drop first; the user can still snapshot the buffer via [c] before
-    // the cap kicks in.
-    private const int MaxLogItems = 5_000;
-
     // 0 = no in-place line, 1 = one is open. Flipped via Interlocked so a
     // second concurrent BeginInPlaceLine throws cleanly per LEASH §10.6.
     private int inPlaceClaimed;
@@ -70,6 +64,11 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
             Background     = Color.Black,
             ScrollbarTrack = Color.DarkGray,
             ScrollbarThumb = Color.LightCyan,
+            // §10.7: cap the in-memory buffer so a chatty app can't grow
+            // memory unbounded over a long-running session. Oldest entries
+            // drop first; the user can still snapshot via [c] before lines
+            // age out.
+            MaxItems       = 5_000,
         };
 
         chrome = new HuskyChrome(
@@ -254,9 +253,6 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
                     break;
             }
         }
-
-        while (logViewer.Items.Count > MaxLogItems)
-            logViewer.Items.RemoveAt(0);
     }
 
     private static string FormatLine(DateTime when, string source, string message)
