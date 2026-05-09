@@ -60,7 +60,14 @@ internal sealed class HuskyChrome : Container
                 LayoutSize.Cells(1), // bottom separator
                 LayoutSize.Cells(1), // action bar
             },
-            Children    = { header, new Separator(), log, new Separator(), actionBar },
+            Children    =
+            {
+                header,
+                new Separator { Foreground = Color.DarkGray, Background = Color.Black },
+                log,
+                new Separator { Foreground = Color.DarkGray, Background = Color.Black },
+                actionBar,
+            },
         };
         Children.Add(body);
     }
@@ -423,19 +430,4 @@ internal sealed class HuskyChrome : Container
         }
     }
 
-    /// <summary>
-    /// 1-row horizontal rule used between the header / log / action-bar
-    /// rows in place of bg-fill bands. Plain U+2500 box-drawing glyph
-    /// across the full width, dim against the chrome's black background.
-    /// </summary>
-    private sealed class Separator : View
-    {
-        public override void OnDraw(ScreenBuffer screen)
-        {
-            var b = Bounds;
-            if (b.Width <= 0 || b.Height <= 0) return;
-            screen.FillRect(b.X, b.Y, b.Width, b.Height,
-                new Cell('─', Color.DarkGray, Color.Black));
-        }
-    }
 }
