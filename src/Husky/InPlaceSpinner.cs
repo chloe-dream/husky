@@ -13,8 +13,11 @@ namespace Husky;
 /// </summary>
 internal sealed class InPlaceSpinner : IDisposable
 {
-    private static readonly char[] Frames =
-        ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+    // Classic ASCII spinner. The pretty braille rotation (U+280B..U+284F)
+    // we used before turned into '?' or Latin-1 garbage on copy/paste
+    // outside UTF-aware viewers; the four-frame pipe/slash/dash/backslash
+    // cycle is universally legible and ticks at the same 10 Hz.
+    private static readonly char[] Frames = ['|', '/', '-', '\\'];
 
     private const int FrameIntervalMs = 100;
 

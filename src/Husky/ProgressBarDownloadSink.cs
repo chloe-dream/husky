@@ -83,8 +83,12 @@ internal sealed class ProgressBarDownloadSink : IDownloadProgress, IDisposable
         int emptyCells = BarWidth - filledCells;
         int percent = (int)Math.Round(fraction * 100.0);
 
+        // ASCII '#' / '.' instead of U+2588 / U+2591 — the block chars
+        // turn into '?' or Latin-1 mojibake when the user copies the
+        // log buffer into a non-UTF-aware viewer (Notepad, some email
+        // clients, etc.). Bar still reads as a bar, survives the trip.
         return
-            $"fetching {new string('█', filledCells)}{new string('░', emptyCells)} {percent,3}%  " +
+            $"fetching {new string('#', filledCells)}{new string('.', emptyCells)} {percent,3}%  " +
             $"{HumanBytes.Format(received)} / {HumanBytes.Format(total)}";
     }
 
