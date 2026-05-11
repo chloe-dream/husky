@@ -167,6 +167,29 @@ Swap `--manifest <url>` for `--repo your-org/your-app` if you publish via GitHub
 
 ---
 
+## Running as a service (Windows)
+
+Husky is a plain foreground executable — it doesn't implement `ServiceBase`, so `sc.exe create` against `Husky.exe` won't produce a working service (Windows expects the process to call `ServiceMain` within 30 seconds, which Husky never does). On a server, wrap it with [NSSM](https://nssm.cc/) instead — a tiny shim that turns any executable into a real Windows service with auto-restart and log redirection.
+
+Minimal recipe (elevated PowerShell):
+
+```powershell
+nssm install Husky-MyApp "C:\Apps\MyApp\Husky.exe" "--repo your-org/your-app"
+nssm set Husky-MyApp AppDirectory "C:\Apps\MyApp"
+nssm set Husky-MyApp AppStdout    "C:\Apps\MyApp\logs\husky.out.log"
+nssm set Husky-MyApp AppStderr    "C:\Apps\MyApp\logs\husky.err.log"
+nssm start Husky-MyApp
+```
+
+- `AppDirectory` plays the role of `--dir`; you can also pass `--dir` explicitly inside the install command's quoted argument string.
+- `AppStdout` / `AppStderr` are essential — without them every launcher and child-app log line is dropped, since the service has no console.
+- Swap `--repo …` for `--manifest <url>` when the source is an HTTPS manifest.
+- Remove with `nssm stop Husky-MyApp; nssm remove Husky-MyApp confirm`.
+
+On **Linux**, no shim is needed: a regular systemd unit invoking `Husky` with `--repo` / `--manifest` works directly — systemd has no equivalent of the 30-second `ServiceMain` deadline that breaks raw `sc.exe` use on Windows.
+
+Native Windows-service hosting (`UseWindowsService` + `--install` / `--uninstall`) isn't on the roadmap. The NSSM path covers the common case without baking OS-specific service plumbing into Husky's single-binary story.
+
 ## Command-line flags
 
 Everything the launcher takes on the command line:
