@@ -30,6 +30,13 @@ internal sealed class LauncherRuntime(
     // Cleared when an update applies, when a new session starts, or when the
     // discovered version changes.
     private string? lastPushedManualVersion;
+    // Re-entrancy gate for the TUI [u] check-and-install hotkey. 0 = idle,
+    // 1 = a user-triggered poll is currently in flight (or its follow-up
+    // apply). Repeated [u] presses while the flag is set get a console
+    // log and are otherwise ignored. The pipe-driven update-now path
+    // (OnUpdateNowFromApp) does not share this gate — that side has its
+    // own once-per-version dedup via lastPushedManualVersion.
+    private int userCheckInFlight;
 
     public async Task<int> RunAsync(CancellationToken graceful, CancellationToken hardKill)
     {
@@ -454,14 +461,71 @@ internal sealed class LauncherRuntime(
     }
 
     /// <summary>
-    /// External request — equivalent to receiving an <c>update-now</c>
-    /// message from the hosted app (LEASH §3.5.12). Bound to the TUI's
-    /// <c>[u]</c> button / hotkey so the human running Husky can trigger
-    /// the cached update without round-tripping through the app's pipe.
-    /// Same semantics as the wire-driven path: if no update is cached,
-    /// a husky log line surfaces and nothing else happens.
+    /// TUI <c>[u]</c> hotkey: force a fresh source poll and, if the source
+    /// reports a newer version than what's currently installed, run the
+    /// normal apply flow (graceful shutdown → install → restart). Lets the
+    /// human bypass the 60-minute polling tick when they want an immediate
+    /// check + install. Distinct from the pipe-driven <c>update-now</c>
+    /// path (<see cref="OnUpdateNowFromApp"/>) — that one trusts the
+    /// app's prior <c>update-check</c> and applies the cached update.
     /// </summary>
-    public void RequestUpdateNow() => OnUpdateNowFromApp();
+    public void RequestUpdateNow()
+    {
+        if (Interlocked.CompareExchange(ref userCheckInFlight, 1, 0) != 0)
+        {
+            ConsoleOutput.Husky("check already in flight — ignoring [u].");
+            return;
+        }
+        _ = Task.Run(async () =>
+        {
+            try { await CheckAndApplyAsync(pollingToken).ConfigureAwait(false); }
+            finally { Interlocked.Exchange(ref userCheckInFlight, 0); }
+        });
+    }
+
+    private async Task CheckAndApplyAsync(CancellationToken ct)
+    {
+        AppSession? session = CurrentSession;
+        if (session is null || !session.ConnectedApp.SupportsManualUpdates) return;
+        if (PeekUpdateInFlight() is not null)
+        {
+            ConsoleOutput.Husky("update already in flight — ignoring [u].");
+            return;
+        }
+
+        string version = session.ConnectedApp.Version;
+        UpdateInfo? update;
+        using (var spinner = new InPlaceSpinner("user check — sniffing for updates"))
+        {
+            try
+            {
+                update = await source.CheckForUpdateAsync(version, ct).ConfigureAwait(false);
+                spinner.Complete(
+                    update is null ? "up to date." : $"new version found: v{update.Version}",
+                    Color.LightGreen);
+            }
+            catch (OperationCanceledException)
+            {
+                spinner.Complete("interrupted.", Color.DarkGray);
+                return;
+            }
+            catch (Exception ex)
+            {
+                spinner.Complete("poll failed.", Color.Yellow);
+                ConsoleOutput.Husky($"update check failed: {ex.Message}");
+                return;
+            }
+        }
+
+        cachedUpdate = update;
+        UpdateAppSessionCache(session, version, update);
+        RefreshUpdateActionState();
+
+        if (update is null) return;
+
+        ConsoleOutput.Husky($"applying v{update.Version}.");
+        await TriggerUpdateAsync(update, ct).ConfigureAwait(false);
+    }
 
     private async Task<string> BootstrapAsync(UpdateInfo seed, CancellationToken ct)
     {
@@ -522,20 +586,18 @@ internal sealed class LauncherRuntime(
 
     /// <summary>
     /// Push the current <see cref="UpdateActionState"/> at the TUI's
-    /// action bar (LEASH §10.4): hidden when no app or no
-    /// <c>manual-updates</c> capability, disabled when the capability is
-    /// there but no <see cref="UpdateInfo"/> is cached, enabled when both
-    /// align. Called whenever the session changes or
-    /// <see cref="cachedUpdate"/> is written.
+    /// action bar (LEASH §10.4): hidden when no app is attached or the
+    /// app does not advertise <c>manual-updates</c>; otherwise enabled.
+    /// No longer cache-gated — pressing <c>[u]</c> always forces a fresh
+    /// source poll, so there's no "nothing cached" disabled state.
+    /// Called whenever the session changes.
     /// </summary>
     private void RefreshUpdateActionState()
     {
         AppSession? session = CurrentSession;
         UpdateActionState state = session is null || !session.ConnectedApp.SupportsManualUpdates
             ? UpdateActionState.Hidden
-            : cachedUpdate is null
-                ? UpdateActionState.Disabled
-                : UpdateActionState.Enabled;
+            : UpdateActionState.Enabled;
         ConsoleOutput.SetUpdateActionState(state);
     }
 

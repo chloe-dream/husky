@@ -1010,7 +1010,7 @@ log viewport instead of header/footer fill bands:
  13:47:15  husky    manual mode — waiting for trigger.
  …                                                            ▓
 ─────────────────────────────────────────────────────────────────  separator (1 row)
- c copy logs · u update now · x exit                                action bar (1 row)
+ s save logs · u check & install · x exit                           action bar (1 row)
 ```
 
 - **Header** (1 row, top): `husky vX.Y.Z` left-aligned in the
@@ -1029,7 +1029,7 @@ log viewport instead of header/footer fill bands:
   applied here — only in line mode. Lines never wrap; overflow is
   clipped with a `…` marker at the right edge.
 - **Action bar** (1 row, bottom): three commands rendered as
-  dot-separated hotkey hints (`c copy logs · u update now · x exit`).
+  dot-separated hotkey hints (`s save logs · u check & install · x exit`).
   The hotkey letter is in the launcher's accent colour and bold; the
   label is light grey on black; the middle-dot separator picks up the
   label colour. No focusable button widgets — every command has a
@@ -1041,8 +1041,8 @@ log viewport instead of header/footer fill bands:
 Global (handled by the root container on bubble-up, after focused
 widgets get first crack):
 
-- `c` — copy logs (see §10.4 actions).
-- `u` — update now.
+- `s` — save logs (see §10.4 actions).
+- `u` — check & install (force a fresh source poll, apply if newer).
 - `x`, `Esc` — exit.
 
 Focus and scrolling (built-in to `Application` / `LogViewer`):
@@ -1055,16 +1055,22 @@ Focus and scrolling (built-in to `Application` / `LogViewer`):
 
 #### Actions
 
-- **Copy logs** — writes the current in-memory log buffer to
+- **Save logs** — writes the current in-memory log buffer to
   `husky-logs-<UTC-timestamp>.txt` in the working directory and
   shows a 3-second toast (or status-bar replacement) reading
   `wrote N lines → husky-logs-…`. No clipboard integration — file
   export is portable across Windows/Linux without OS-specific
   plumbing.
-- **Update now** — fires the same code path as an inbound
-  `update-now` message (LEASH §3.5.12). Hidden when the connected
-  app does not advertise `manual-updates`; greyed when no update is
-  cached.
+- **Check & install** — forces a fresh source poll right now, bypassing
+  the next scheduled polling tick. If the source reports a newer
+  version than what's currently installed, the launcher follows up
+  with the normal apply flow (graceful shutdown → install → restart).
+  Hidden when the connected app does not advertise `manual-updates`;
+  always actionable when shown — no greyed state. A second press
+  while a check (or its follow-up apply) is still in flight is
+  ignored with a console log. Distinct from the inbound `update-now`
+  message (§3.5.12), which trusts the app's prior `update-check` and
+  applies the cached update without re-polling.
 - **Exit** — graceful shutdown via §5.5 (sends `shutdown` with
   `reason: "manual"`, awaits ack and timeout, then exits `0`).
 
@@ -1123,9 +1129,9 @@ in arrival order, no escalation channel needed.
 - Husky writes nothing to disk on its own. The log buffer is in-memory
   only, capped at **5 000 lines** (oldest dropped).
 - Persistence is the operator's choice: in line mode, redirect output
-  (`> husky.log` / journald). In TUI mode, the user presses `c` to
+  (`> husky.log` / journald). In TUI mode, the user presses `s` to
   export the current buffer.
-- This satisfies §1.2 ("no file-based logging") — the `c` action is
+- This satisfies §1.2 ("no file-based logging") — the `s` action is
   an opt-in snapshot, not a streaming log file.
 
 ---

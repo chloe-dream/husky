@@ -285,7 +285,7 @@ internal sealed class HuskyChrome : Container
 
     /// <summary>
     /// 1-row strip at the bottom showing the three commands as
-    /// dot-separated hotkey hints (<c>s save logs · u update now · x exit</c>).
+    /// dot-separated hotkey hints (<c>s save logs · u check &amp; install · x exit</c>).
     /// The hotkey letter is in the launcher's accent colour and bold; the
     /// label is plain on a black background; the middle-dot separator picks
     /// up the label colour. Activation goes through
@@ -377,44 +377,37 @@ internal sealed class HuskyChrome : Container
 
             int x = b.X + 1;
             int max = b.X + b.Width;
-            x = DrawCommand(screen, x, b.Y, max, "s", "save logs", enabled: true);
+            x = DrawCommand(screen, x, b.Y, max, "s", "save logs");
             if (localState != UpdateActionState.Hidden)
             {
                 x = DrawDotSeparator(screen, x, b.Y, max);
-                x = DrawCommand(screen, x, b.Y, max, "u", "update now",
-                    enabled: localState == UpdateActionState.Enabled);
+                x = DrawCommand(screen, x, b.Y, max, "u", "check & install");
             }
             x = DrawDotSeparator(screen, x, b.Y, max);
-            DrawCommand(screen, x, b.Y, max, "x", "exit", enabled: true);
+            DrawCommand(screen, x, b.Y, max, "x", "exit");
 
             _ = onCopy; _ = onUpdate; _ = onExit;
         }
 
         private static int DrawCommand(
-            ScreenBuffer screen, int x, int y, int max, string hotkey, string label, bool enabled)
+            ScreenBuffer screen, int x, int y, int max, string hotkey, string label)
         {
-            // Disabled state dims both the hotkey letter and the label so
-            // the entry reads as 'present but inert' on the black bg.
-            // Hotkey stays bold to keep the rhythm.
-            Color hotkeyColor = enabled ? Color.LightCyan : Color.DarkGray;
-            Color labelColor  = enabled ? Color.LightGray : Color.DarkGray;
-
             int hkLen = Math.Min(hotkey.Length, max - x);
             if (hkLen > 0)
                 screen.PutString(x, y, hotkey.AsSpan(0, hkLen),
-                    hotkeyColor, Color.Black, CellAttrs.Bold);
+                    Color.LightCyan, Color.Black, CellAttrs.Bold);
             x += hkLen;
 
             if (x < max)
             {
-                screen.PutString(x, y, " ".AsSpan(), labelColor, Color.Black);
+                screen.PutString(x, y, " ".AsSpan(), Color.LightGray, Color.Black);
                 x += 1;
             }
 
             int lblLen = Math.Min(label.Length, max - x);
             if (lblLen > 0)
                 screen.PutString(x, y, label.AsSpan(0, lblLen),
-                    labelColor, Color.Black);
+                    Color.LightGray, Color.Black);
             return x + lblLen;
         }
 

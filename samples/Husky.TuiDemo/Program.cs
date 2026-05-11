@@ -52,7 +52,7 @@ app = new HuskyApp(
         // The demo has no real update flow; just surface the click so the
         // hotkey/button is visibly responsive.
         ConsoleOutput.Husky(
-            "[u] update now — demo has no real update path.",
+            "[u] check & install — demo has no real update path.",
             messageColor: Color.Yellow);
     },
     onExitRequested: () =>
@@ -121,10 +121,11 @@ static async Task BootSequenceAsync(CancellationToken ct)
     await Task.Delay(400, ct).ConfigureAwait(false);
     // Header populates the moment the synthetic 'hello' lands.
     ConsoleOutput.SetAppInfo("demo-app", "1.4.2");
-    // Demo app advertises the manual-updates capability but no update is
-    // cached yet, so [u] renders greyed (Disabled). The header's right
-    // slot stays empty until the first pong.
-    ConsoleOutput.SetUpdateActionState(UpdateActionState.Disabled);
+    // Demo app advertises the manual-updates capability, so [u] renders
+    // active in the action bar — the hotkey forces a fresh source poll
+    // on press regardless of cached state. Header's right slot stays
+    // empty until the first pong.
+    ConsoleOutput.SetUpdateActionState(UpdateActionState.Enabled);
     ConsoleOutput.AppOut("demo-app: bootstrap complete");
     await Task.Delay(200, ct).ConfigureAwait(false);
     ConsoleOutput.AppOut("demo-app: connected to 12 guilds");
@@ -210,8 +211,6 @@ static async Task FakeSniffingAsync(CancellationToken ct)
     using var spinner = new InPlaceSpinner("sniffing for updates");
     await Task.Delay(2200, ct).ConfigureAwait(false);
     spinner.Complete("new version found: v0.4.0", Color.LightGreen);
-    // Cached UpdateInfo lights [u] up in the action bar (Enabled).
-    ConsoleOutput.SetUpdateActionState(UpdateActionState.Enabled);
     await Task.Delay(600, ct).ConfigureAwait(false);
 }
 
@@ -235,8 +234,9 @@ static async Task FakeShutdownAsync(CancellationToken ct)
     ConsoleOutput.SetUpdateActionState(UpdateActionState.Hidden);
     await Task.Delay(800, ct).ConfigureAwait(false);
     ConsoleOutput.SetAppInfo("demo-app", "0.4.0");
-    // Update was applied, so the new session has no cached update yet.
-    ConsoleOutput.SetUpdateActionState(UpdateActionState.Disabled);
+    // Fresh session re-attaches — [u] re-enables (manual-updates capability
+    // still advertised; no cache gate any more).
+    ConsoleOutput.SetUpdateActionState(UpdateActionState.Enabled);
     ConsoleOutput.SetHealth("healthy");
     ConsoleOutput.Husky("demo-app v0.4.0 is up.");
     await Task.Delay(400, ct).ConfigureAwait(false);
@@ -291,9 +291,9 @@ static async Task FakeCrashRestartAsync(CancellationToken ct)
     ConsoleOutput.SetCrashRestart(null);
 
     // Fresh session lands. Header repopulates and the action bar's [u]
-    // returns in its disabled (no cached update) state.
+    // re-enables (capability is back, no cache gate any more).
     ConsoleOutput.SetAppInfo("demo-app", "0.4.0");
-    ConsoleOutput.SetUpdateActionState(UpdateActionState.Disabled);
+    ConsoleOutput.SetUpdateActionState(UpdateActionState.Enabled);
     ConsoleOutput.SetHealth("healthy");
     ConsoleOutput.Husky("back online. demo-app v0.4.0 is up.");
     await Task.Delay(400, ct).ConfigureAwait(false);
