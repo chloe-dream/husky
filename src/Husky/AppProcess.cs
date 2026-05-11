@@ -20,15 +20,29 @@ internal sealed class AppProcess : IAsyncDisposable
         this.process = process;
         ProcessId = process.Id;
 
-        process.Exited += OnExited;
-
-        // Subscription races with process termination — re-check after subscribing.
-        if (process.HasExited) OnExited(this, EventArgs.Empty);
+        // WaitForExitAsync (unlike the raw Exited event) waits for the
+        // process to exit *and* drains the async stdout/stderr readers'
+        // EOF tasks before returning. Without this, ExitTask can complete
+        // while ErrorDataReceived / OutputDataReceived callbacks for the
+        // final stderr/stdout bytes are still queued on the ThreadPool,
+        // so a consumer reading the captured lines right after the await
+        // sees an empty list. Observed under CI load on AppProcessTests
+        // (.NET docs flag the same race explicitly for the event path).
+        _ = MonitorExitAsync();
     }
 
-    private void OnExited(object? sender, EventArgs e)
+    private async Task MonitorExitAsync()
     {
-        if (hasExited) return;
+        try
+        {
+            await process.WaitForExitAsync().ConfigureAwait(false);
+        }
+        catch
+        {
+            // Whatever happened, we still need to complete the TCS so
+            // callers don't hang forever — fall through to the recording.
+        }
+
         try { exitCode = process.ExitCode; }
         catch (InvalidOperationException) { exitCode = -1; }
         hasExited = true;
@@ -64,6 +78,9 @@ internal sealed class AppProcess : IAsyncDisposable
             }
         }
 
+        // EnableRaisingEvents keeps the internal wait-state primed even
+        // though we don't subscribe to Process.Exited any more (we wait
+        // via WaitForExitAsync instead, which drains stdout/stderr).
         Process proc = new() { StartInfo = psi, EnableRaisingEvents = true };
         proc.OutputDataReceived += (_, e) =>
         {
