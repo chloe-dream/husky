@@ -32,7 +32,7 @@ using Retro.Crt;
 //      slot reads 'down — restarting in Ns' in red while [u] hides.
 //  11. 200-line burst to verify the ConcurrentQueue drain keeps up.
 //
-// After the burst the demo idles. Press [c] for the copy-logs toast,
+// After the burst the demo idles. Press [s] for the save-logs toast,
 // [u] for an update-now log line, Esc to exit.
 //
 // Run with: dotnet run --project samples/Husky.TuiDemo
@@ -325,7 +325,7 @@ static async Task BurstAsync(CancellationToken ct)
 
 static async Task IdleAsync(CancellationToken ct)
 {
-    ConsoleOutput.Husky("idle. press [c] for copy-logs toast, [u] for update demo, Esc to exit.");
+    ConsoleOutput.Husky("idle. press [s] for save-logs toast, [u] for update demo, Esc to exit.");
     int n = 0;
     while (!ct.IsCancellationRequested)
     {

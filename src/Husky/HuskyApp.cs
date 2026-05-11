@@ -75,8 +75,8 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
             launcherVersion: launcherVersion,
             log: logViewer,
             drainPending: DrainPending,
-            // [c] copy logs: this side owns the LogViewer snapshot, so the
-            // copy handler is local to HuskyApp.
+            // [s] save logs: this side owns the LogViewer snapshot, so the
+            // save handler is local to HuskyApp.
             onCopyRequested: CopyLogsToFile,
             onUpdateRequested: onUpdateRequested,
             onExitRequested: onExitRequested);
@@ -129,7 +129,7 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
     /// <summary>
     /// Snapshot the current <see cref="LogViewer"/> contents and write them
     /// to <c>husky-logs-&lt;UTC-timestamp&gt;.txt</c> in the working
-    /// directory. Called from the [c] button / hotkey on the UI thread, so
+    /// directory. Called from the [s] button / hotkey on the UI thread, so
     /// the snapshot is consistent; the actual file IO runs on a background
     /// task to keep the render loop responsive. The result lands as a
     /// husky log line — green on success, yellow on failure — so the user
@@ -144,7 +144,7 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
             snapshot.Add(entry.Text ?? string.Empty);
 
         string fileName = $"husky-logs-{DateTime.UtcNow:yyyy-MM-ddTHH-mm-ss}Z.txt";
-        // §10.4: copy-logs lands in the resolved working directory, not
+        // §10.4: save-logs lands in the resolved working directory, not
         // the process's CWD — `--dir` may have pointed Husky elsewhere.
         string path = Path.Combine(workingDirectory, fileName);
 
@@ -164,7 +164,7 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
             catch (Exception ex)
             {
                 chrome.ShowActionBarToast(
-                    $"copy logs failed: {ex.Message}",
+                    $"save logs failed: {ex.Message}",
                     Color.Yellow);
             }
         });

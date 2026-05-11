@@ -155,7 +155,7 @@ internal sealed class HuskyChrome : Container
             {
                 switch (g)
                 {
-                    case 'c' or 'C': onCopyRequested();   return true;
+                    case 's' or 'S': onCopyRequested();   return true;
                     case 'u' or 'U': onUpdateRequested(); return true;
                     case 'x' or 'X': onExitRequested();   return true;
                 }
@@ -285,7 +285,7 @@ internal sealed class HuskyChrome : Container
 
     /// <summary>
     /// 1-row strip at the bottom showing the three commands as
-    /// dot-separated hotkey hints (<c>c copy logs · u update now · x exit</c>).
+    /// dot-separated hotkey hints (<c>s save logs · u update now · x exit</c>).
     /// The hotkey letter is in the launcher's accent colour and bold; the
     /// label is plain on a black background; the middle-dot separator picks
     /// up the label colour. Activation goes through
@@ -304,7 +304,7 @@ internal sealed class HuskyChrome : Container
         // connected app's capabilities + the cached UpdateInfo.
         private UpdateActionState updateState;
         // Transient status replacement that takes the bar over for a few
-        // seconds (e.g., the [c] copy-logs confirmation). Supersession
+        // seconds (e.g., the [s] save-logs confirmation). Supersession
         // is handled with a monotonically-incrementing generation
         // counter: each ShowToast bumps it, and the old fire-and-forget
         // clear-task only acts when its generation still matches.
@@ -377,7 +377,7 @@ internal sealed class HuskyChrome : Container
 
             int x = b.X + 1;
             int max = b.X + b.Width;
-            x = DrawCommand(screen, x, b.Y, max, "c", "copy logs", enabled: true);
+            x = DrawCommand(screen, x, b.Y, max, "s", "save logs", enabled: true);
             if (localState != UpdateActionState.Hidden)
             {
                 x = DrawDotSeparator(screen, x, b.Y, max);
