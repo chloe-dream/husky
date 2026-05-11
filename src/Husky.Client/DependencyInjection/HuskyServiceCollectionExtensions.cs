@@ -12,7 +12,7 @@ public static class HuskyServiceCollectionExtensions
     ///
     /// Pass <paramref name="configure"/> to tune connection timeouts or set the
     /// initial update mode (e.g. <c>o.UpdateMode = HuskyUpdateMode.Manual</c>
-    /// for a Fishbowl-style "Update now" UI).
+    /// for an app that owns its own "Update now" button).
     ///
     /// Health reporting is wired automatically: if the application registers
     /// <c>AddHealthChecks()</c>, ping responses reflect the aggregated
