@@ -82,6 +82,14 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
             onExitRequested: onExitRequested);
 
         application = new Application(chrome);
+        // Opt out of mouse capture so the terminal's native click-and-drag
+        // text selection keeps working over Husky's alt-screen output.
+        // Trade-off: click-to-focus, scrollbar drag, and wheel scrolling
+        // stop working; keyboard nav still does. Husky is a passive
+        // monitor — operators are far more likely to want to copy a log
+        // line than to mouse around the chrome. (Retro.Crt.Tui >= 0.2.0,
+        // upstream issue #19.)
+        application.MouseCapture = MouseCaptureMode.None;
         // §10.4: 'Default focus: log viewport, pinned to tail.' Without
         // this the first focusable widget wins, which depending on the
         // chrome's layout could be something else after future widgets
@@ -260,9 +268,13 @@ internal sealed class HuskyApp : ConsoleOutput.IConsoleSink
         // LEASH §10.4: TUI lines carry the same prefix as line mode but in
         // a single source colour. Pad source to match the line-mode width
         // for visual alignment when the user copies the buffer to a file.
+        // Leading + trailing space matches the chrome convention (header
+        // left/right slots both wrap their text in a single space), so a
+        // mouse drag-select across header + logs + footer copies out with
+        // a consistent 1-cell gutter on either side.
         string timestamp = when.ToString("HH:mm:ss");
         string padded = source.Length >= 8 ? source : source.PadRight(8);
-        return $"{timestamp}  {padded}  {message}";
+        return $" {timestamp}  {padded}  {message} ";
     }
 
     private void EnqueueUpdate(DateTime when, string source, Color sourceColor, string message)
