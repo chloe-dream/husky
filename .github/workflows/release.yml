@@ -32,7 +32,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v5
@@ -123,7 +123,7 @@ jobs:
           tar -czf "husky-${{ matrix.rid }}-aot.tar.gz" -C publish/${{ matrix.rid }}-aot ${{ matrix.exe }}
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: husky-${{ matrix.rid }}
           path: |
